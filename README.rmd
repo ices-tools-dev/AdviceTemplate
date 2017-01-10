@@ -39,5 +39,5 @@ With ~ 1 week of dedicated coding we can probably get to Stage 2.
 
 
 Tables that should not be transferred from year-1:
-History of catch and landings/ commercial catch
-Summary of the assessment
+  * History of catch and landings/ commercial catch
+  * Summary of the assessment
