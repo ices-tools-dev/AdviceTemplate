@@ -14,25 +14,25 @@ Notes:
 
 ### Stages
 1. The [ReporteRs](https://cran.r-project.org/web/packages/ReporteRs/index.html) package can add relevant information from the SLD (via the [icesSLD](https://github.com/ices-tools-prod/icesSLD) package) to a generic advice sheet template to create a draft advice sheet for each stock. Each draft advice sheet will have updated stock names, section numbers, advice heading, and caption labels saved to a output folder with a specific file name (e.g., O:/<book_number>/<STOCK.CODE>.docx).
-* Advantages: Minimal Secretariat time and effort. Comments added to template are retained in drafts. All information added will be directly from the SLD, ensuring consistency. Creates a feedback loop when errors are noted in draft advice sheets the SLD can be updated.
-* Limitations: Draft advice sheets will not have any information from year-1 and the Secretariat will still need to copy over tables. 
-* Completion: 75% (~ 1 day to be complete for all stocks)
-* Outstanding issues: Header right align published date. Stock name heading hanging tab.
+  * Advantages: Minimal Secretariat time and effort. Comments added to template are retained in drafts. All information added will be directly from the SLD, ensuring consistency. Creates a feedback loop when errors are noted in draft advice sheets the SLD can be updated.
+  * Limitations: Draft advice sheets will not have any information from year-1 and the Secretariat will still need to copy over tables. 
+  * Completion: 75% (~ 1 day to be complete for all stocks)
+  * Outstanding issues: Header right align published date. Stock name heading hanging tab.
 
 2. Building on the above, the [docxtractr](https://cran.r-project.org/web/packages/docxtractr/index.html) package can harvest tables from year-1 advice sheets and the ReporteRs package can format and add standard tables to the proper location in the draft advice sheets. Splitting the stocks into data categories (Category 1-6) and stock type (e.g., crustacean, elasmobranch, or fish) will be necessary to format and add the different standard tables for each unique type.
-* Advantages: Same as above, but with a much more complete draft. The decision can be made to delete or retain the values in each table.
-* Limitations: Some tables might be too complicated to completely format, but can still be added to draft advice sheets. Footnotes (e.g., *) within tables are retained, however, footnote labels will need to be copied from year-1 advice sheets. Non-standard tables will not be formated and transferred from year-1.
-* Completion: 25% (~ 3-4 days in addition to Stage 1 to complete for most stocks)
+  * Advantages: Same as above, but with a much more complete draft. The decision can be made to delete or retain the values in each table.
+  * Limitations: Some tables might be too complicated to completely format, but can still be added to draft advice sheets. Footnotes (e.g., *) within tables are retained, however, footnote labels will need to be copied from year-1 advice sheets. Non-standard tables will not be formated and transferred from year-1.
+  * Completion: 25% (~ 3-4 days in addition to Stage 1 to complete for most stocks)
 
 3. The table "History of Catch and Landings" can be added directly from the ICES Historical Catch database and Rec-12.  
-* Advantages: Complete provenance from data to advice. 
-* Limitations: Sometimes this table is really complex. Worse, the values presented in advice are completely different from what is found in ICES databases. Is this table really necessary?
-* Completion: 15% (~ 4 days to complete for most stocks)
+  * Advantages: Complete provenance from data to advice. 
+  * Limitations: Sometimes this table is really complex. Worse, the values presented in advice are completely different from what is found in ICES databases. Is this table really necessary?
+  * Completion: 15% (~ 4 days to complete for most stocks)
 
 4. Currently, we create draft advice sheets before the Working Group. If we create draft advice sheets after the final assessment is accepted and uploaded to Stock Assessment Graphs, the icesSAG package can be used to add figures and tables directly into the draft advice sheet.
-* Advantages: Nearly a complete draft advice sheet with full provenance to ICES databases (SLD, SAG, and potentially Historical Catch and Rec-12 databases).
-* Limitations: We would be changing how we work.
-* Completion: 0% (~ 2 days, plus additional time to train supporting staff to generate advice sheets)
+  * Advantages: Nearly a complete draft advice sheet with full provenance to ICES databases (SLD, SAG, and potentially Historical Catch and Rec-12 databases).
+  * Limitations: We would be changing how we work.
+  * Completion: 0% (~ 2 days, plus additional time to train supporting staff to generate advice sheets)
 
 ## Conclusions
 With ~ 1 week of dedicated coding we can probably get to Stage 2.
