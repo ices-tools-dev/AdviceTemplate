@@ -179,11 +179,6 @@ stockDat <- cat3 %>%
   # 
   doc <- read_docx(paste0(sharePoint, stockID, ".docx"))
 
-  # docx_tbl_count(doc)
-  # docx_describe_tbls(doc)
-  # docx_extract_tbl(doc, tbl_number = 2)
-  
-  # catchOptionsData <- docx_extract_tbl(doc, tbl_number = 5, header = FALSE)
   # Category 3 Catch Options Table
   catchOptionsData <- docx_extract_tbl(doc, tbl_number = 2, header = FALSE)
   colnames(catchOptionsData) <- c("DESCRIPTION", "VALUE", "BLANK")
