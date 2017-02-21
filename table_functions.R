@@ -18,11 +18,13 @@ library(ReporteRs)
 
 # This function uses a stock code to find the previous advice .docx in sharepoint and uses some simple 
 # grep searches to identify the target tables.
-# stock.code <- "cod.27.3a47d"
-tableData <- function(stock.code, adviceTable, # SAG
+# StockCode <- "cod.27.3a47d"
+# adviceTable <- "adviceBasisTable"
+tableData <- function(stock.code,
+                      adviceTable , # SAG
                       header = FALSE) {
   
-  fileName <- fileList$file.path[fileList$STOCK.CODE == stock.code]
+  fileName <- fileList$file.path[fileList$StockCode == stock.code]
   doc <- read_docx(fileName)
   
   tableCount <- unlist(lapply(fileName, function(x) docx_tbl_count(doc)))
@@ -41,7 +43,7 @@ tableData <- function(stock.code, adviceTable, # SAG
   # Catch Options Basis #
   #######################
   if(adviceTable %in% c("catchOptionsBasisTable")) {
-    if(fileList$CATEGORY[fileList$STOCK.CODE == stock.code] >= 2) {
+    if(fileList$DataCategory[fileList$StockCode == stock.code] >= 2) {
       stop(paste0(adviceTable, " is only applicable for Category 1 and 2 stocks."))
     }
     match_variable <- grep("variable",  tolower(columnNames))
@@ -83,7 +85,7 @@ tableData <- function(stock.code, adviceTable, # SAG
   # Reference points #
   ####################
   if(adviceTable %in% c("referencePointsTable")) {
-    if(fileList$CATEGORY[fileList$STOCK.CODE == stock.code] >= 2) {
+    if(fileList$DataCategory[fileList$StockCode == stock.code] >= 2) {
       stop(paste0(adviceTable, " is only available for Category 1 and 2 stocks."))
     }
     match_framework <- grep("framework",  tolower(columnNames))
@@ -146,70 +148,80 @@ tableData <- function(stock.code, adviceTable, # SAG
   #####################
   tableDat <- lapply(tbl_number, function(x) docx_extract_tbl(doc, 
                                                          tbl_number = x,
-                                                         header = TRUE))
+                                                         header = header))
   names(tableDat) <- paste0("T", tbl_number)
   return(tableDat)
-# 
-#   tableDat <- docx_extract_tbl(doc, 
-#                                tbl_number = tbl_number,
-#                                header = header)
-  # return(tableDat)
 }
 
-# lapply(fileList$STOCK.CODE[fileList$CATEGORY %in% c(1:2)], function(x) tableData(stock.code = x, adviceTable[2]))
 
-# adviceTable <- c("stockExploitationTable", # from SAG
-#                  "catchOptionsBasisTable", # 1 and 2
-#                  "catchOptionsTable", # 
-#                  "adviceBasisTable", #1, 2, 3, 4, 5, and 6
-#                  "referencePointsTable", # 1, 2
-#                  "assessmentBasisTable", # 1, 2, 3, 4, 5, and 6
-#                  "adviceHistoryTable", # 1, 2, 3, 4, 5, and 6
-#                  "catchDistributionTable", # NONE
-#                  "catchHistoryTable", # NONE
-#                  "assessmentSummaryTable" # SAG
-# )
+titlePot <- function(ecoregion.name, pub.date) {
+  hPot <- pot(paste0(ecoregion.name, "\t\tPublished "),
+              format = header_text_prop) +
+    pot(pub.date,
+        format = header_text_prop)
+  return(hPot)
+}
 
-headingPot <- function(stock.code) {
-  hPot <- pot(stockList$SECTION.NUMBER[stockList$STOCK.CODE == stock.code],
+headingPot <- function(stock.code, section.number, stock.name) {
+  hPot <- pot(section.number,
               format = heading_text_prop) + 
     "\t" +
-    pot(stockList$STOCK.NAME[stockList$STOCK.CODE == stock.code],
+    pot(stock.name,
         format = heading_text_prop)
   return(hPot)
 }
 
-footerPot <- function(stock.code) {
+footerPot <- function(stock.code, section.number) {
   fPot <- pot("ICES Advice 2017",
               format = header_text_prop) +
     pot(", Book ",
         format = header_text_prop) + 
     pot(gsub("(.*?)(\\..*)", "\\1",
-             stockList$SECTION.NUMBER[stockList$STOCK.CODE == stock.code]),
+             section.number),
+             # stockList$SECTION.NUMBER[stockList$StockCode == stock.code]),
         format = header_text_prop)
   return(fPot)
 }
 
-headerPot <- function(stock.code) {
+headerPot <- function(stock.code, pub.date) {
   hPot <- pot("ICES Advice on fishing opportunities, catch, and effort\t\t",
-               format = header_text_prop) +
-    # pot(stockList$PUBLICATION.DATE[stockList$STOCK.CODE == stock.code],
-    #     format = header_text_prop)
-    pot("Published DATE WILL BE ADDED WITH SLD",
+              format = header_text_prop) +
+    pot(pub.date,
         format = header_text_prop)
   return(hPot)
 }
 
-captionPot <- function(stock.code, type = c("Figure", "Table"), number, text) {
+captionPot <- function(stock.code,
+                       type = c("Figure", "Table"), 
+                       section.number,
+                       caption.number, 
+                       caption.name,
+                       caption.text) {
   
-  cPot <- pot(paste0(type, " ",
-                     stockList$SECTION.NUMBER[stockList$STOCK.CODE == stock.code],
-                     ".", number, "\t"), 
+  cPot <- pot(paste0(type, " ", section.number,
+                     ".", caption.number, "\t"), 
               format = fig_bold_text_prop) + 
-    pot(paste0(stockList$CAPTION.NAME[stockList$STOCK.CODE == stock.code], ". ", text), 
+    pot(paste0(caption.name, ". ", caption.text), 
         format = fig_base_text_prop)
   return(cPot)
 }
+
+summaryPot <- function(common.name) {
+  
+  toMatch <- c("Greenland", "Norway", "Portuguese")
+  if(length(grep(paste(toMatch,
+                       collapse = "|"), 
+                 common.name)) < 1) {
+    common.name <- tolower(common.name)
+  }  
+
+  sPot <- pot(paste0("There is no assessment for ",
+                     common.name,
+                     " in this area."),
+              format = base_text_prop)
+  return(sPot)
+}
+
 
 # Advice Basis Table
 advice_basis_table <- function(stock.code) {
@@ -217,12 +229,19 @@ advice_basis_table <- function(stock.code) {
                                adviceTable = "adviceBasisTable",
                                header = FALSE)
   
+  if(class(adviceBasisData) == "list") {
+  adviceBasisData <- adviceBasisData[[1]]
+  }
+
   colnames(adviceBasisData) <- c("DESCRIPTION", "VALUE")
   
   adviceBasisTable <-  FlexTable(adviceBasisData, header.columns = FALSE,
-                                 body.cell.props = cellProperties(padding.left = 2, padding.right = 2, padding.bottom = 0),
-                                 body.text.props = textProperties(font.family = "Calibri", font.weight = "normal", font.size = 9)
-  )
+                                 body.cell.props = cellProperties(padding.left = 2,
+                                                                  padding.right = 2,
+                                                                  padding.bottom = 0),
+                                 body.text.props = textProperties(font.family = "Calibri",
+                                                                  font.weight = "normal",
+                                                                  font.size = 9))
   
   adviceBasisTable[, 1] = cellProperties(background.color = "#E8EAEA")
   adviceBasisTable[, c(1:2)] = parProperties(text.align = "left")
@@ -231,13 +250,20 @@ advice_basis_table <- function(stock.code) {
 }
 
 # Assessment Basis Table
-assessment_basis_table <- function(stock.code) {
+assessment_basis_table <- function(stock.code, data.category) {
   
   assessmentBasisData <- tableData(stock.code, 
                                    adviceTable = "assessmentBasisTable",
                                    header = FALSE)
+  
+  
+  if(class(assessmentBasisData) == "list" &
+     length(assessmentBasisData) == 1) {
+    assessmentBasisData <- assessmentBasisData[[1]]
+  }
+  
   colnames(assessmentBasisData) <- c("DESCRIPTION", "VALUE")
-  assessmentBasisData$VALUE[1] <- paste0(stockList$CATEGORY[stockList$STOCK.CODE == stock.code],
+  assessmentBasisData$VALUE[1] <- paste0(data.category,
                                          " (ICES, 2017a).")
   assessmentBasisData$VALUE[1:2] <- gsub("ICES, 201[5-6].*?", "ICES, 2017", assessmentBasisData$VALUE[1:2])
   
@@ -279,29 +305,32 @@ catch_options_basis_table <- function(stock.code) {
   return(catchBasisTable)
 }
 
-advice_history_table <- function(stock.code) {
+# stock.code <- fileList$StockCode[2]
+# data.category <- 1
+advice_history_table <- function(stock.code,
+                                 data.category) {
   
-  
-  numYears <- ifelse(stockList$CATEGORY[stockList$STOCK.CODE == stock.code] %in% c(1,2),
+  numYears <- ifelse(data.category %in% c(1,2),
                      1,
                      2)
-
-    adviceHistoryData <- tableData(stock.code, 
-                                   adviceTable = "adviceHistoryTable",
-                                   header = TRUE)
-    catchTables <- names(adviceHistoryData)
-
-    adviceHistoryTable <- vector("list", length(catchTables))
-    names(adviceHistoryTable) <- catchTables
-    
+  
+  adviceHistoryData <- tableData(stock.code, 
+                                 adviceTable = "adviceHistoryTable",
+                                 header = TRUE)
+  
+  catchTables <- names(adviceHistoryData)
+  
+  adviceHistoryTable <- vector("list", length(catchTables))
+  names(adviceHistoryTable) <- catchTables
+  # i <- "T7"
   for(i in catchTables) {
-    # catchHistoryDF <- data.frame(adviceHistoryData[[i]])
+
     temprow <- data.frame(matrix(c(rep.int(NA, length(adviceHistoryData[[i]]))),
                                  nrow = numYears,
                                  ncol = length(adviceHistoryData[[i]])))
-    
     colnames(temprow) <- colnames(adviceHistoryData[[i]])
-    temprow$Year <- seq(from = 2018, length = numYears)
+    
+    temprow[1] <- seq(from = 2018, length = numYears)
     adviceHistoryData[[i]] <- rbind(adviceHistoryData[[i]],
                                temprow)
     #
@@ -318,7 +347,7 @@ advice_history_table <- function(stock.code) {
     adviceHistoryTable[, 2, to = "body"] = parProperties(text.align = "left", padding = 1)
     setFlexTableWidths(adviceHistoryTable, rep((17.91/2.54) / ncol(adviceHistoryData[[i]]),
                                                ncol(adviceHistoryData[[i]])))
-    catchTablesList[[i]] <- adviceHistoryTable
+    adviceHistoryTable[[i]] <- adviceHistoryTable
   }
-  return(catchTablesList)
+  return(adviceHistoryTable)
 }
