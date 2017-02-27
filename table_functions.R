@@ -8,9 +8,9 @@
 # Install and load packages #
 #############################
 # library(readxl) # not necessary once SLD is up and running
-library(tidyverse)
-library(docxtractr)
-library(ReporteRs)
+# library(tidyverse)
+# library(docxtractr)
+# library(ReporteRs)
 
 #############
 # FUNCTIONS #
@@ -162,7 +162,7 @@ titlePot <- function(ecoregion.name, pub.date) {
   return(hPot)
 }
 
-headingPot <- function(stock.code, section.number, stock.name) {
+headingPot <- function(stock.code, stock.name) {
   hPot <- pot(section.number,
               format = heading_text_prop) + 
     "\t" +
@@ -193,13 +193,15 @@ headerPot <- function(stock.code, pub.date) {
 
 captionPot <- function(stock.code,
                        type = c("Figure", "Table"), 
-                       section.number,
+                       # section.number,
                        caption.number, 
                        caption.name,
                        caption.text) {
   
-  cPot <- pot(paste0(type, " ", section.number,
-                     ".", caption.number, "\t"), 
+  cPot <- pot(paste0(type, " ", 
+                     # section.number,
+                     # ".",
+                     caption.number, "\t"), 
               format = fig_bold_text_prop) + 
     pot(paste0(caption.name, ". ", caption.text), 
         format = fig_base_text_prop)
@@ -250,7 +252,7 @@ advice_basis_table <- function(stock.code) {
 }
 
 # Assessment Basis Table
-assessment_basis_table <- function(stock.code, data.category) {
+assessment_basis_table <- function(stock.code, data.category, expert.name, expert.url) {
   
   assessmentBasisData <- tableData(stock.code, 
                                    adviceTable = "assessmentBasisTable",
@@ -264,13 +266,25 @@ assessment_basis_table <- function(stock.code, data.category) {
   
   colnames(assessmentBasisData) <- c("DESCRIPTION", "VALUE")
   assessmentBasisData$VALUE[1] <- paste0(data.category,
-                                         " (ICES, 2017a).")
+                                         " (ICES, UPDATE REFERENCE).")
   assessmentBasisData$VALUE[1:2] <- gsub("ICES, 201[5-6].*?", "ICES, 2017", assessmentBasisData$VALUE[1:2])
+  
+ 
+  if(grepl(expert.name, assessmentBasisData$VALUE[7])) {
+    pot_link <- pot(gsub(paste0("*\\([", expert.name, "\\)]+\\)\\."), "", assessmentBasisData$VALUE[7]),
+                    format = fig_base_text_prop) +
+                pot(paste0("(", expert.name, ")."),
+                    hyperlink = expert.url,
+                    format = fig_base_text_prop)
+    assessmentBasisData$VALUE[7] <- ""
+  }
   
   assessmentBasisTable <-  FlexTable(assessmentBasisData, header.columns = FALSE,
                                      body.cell.props = cellProperties(padding.left = 2, padding.right = 2, padding.bottom = 0),
                                      body.text.props = textProperties(font.family = "Calibri", font.weight = "normal", font.size = 9)
   )
+  
+  assessmentBasisTable[ 7, 2, to = "body"] <- pot_link
   assessmentBasisTable[, 1] = cellProperties(background.color = "#E8EAEA")
   assessmentBasisTable[, c(1:2)] = parProperties(text.align = "left")
   setFlexTableWidths(assessmentBasisTable, c((3.55/2.54), (14.45/2.54)))
@@ -284,9 +298,16 @@ catch_options_basis_table <- function(stock.code) {
   catchBasisData <- tableData(stock.code, 
                               adviceTable = "catchOptionsBasisTable",
                               header = TRUE)
+  
+  if(class(catchBasisData) == "list") {
+    catchBasisData <- catchBasisData[[1]]
+  }
+  
   catchBasisData$Variable <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.character(catchBasisData$Variable))
+  catchBasisData$Variable <- gsub("\\s*201[0-9]+", " (UPDATE)", as.character(catchBasisData$Variable))
   catchBasisData$Source <- gsub("201[5-6].*?", "2017", catchBasisData$Source)
   catchBasisData$Value <- ""
+  catchBasisData$Notes <- ""
   
   catchBasisTable <-  FlexTable(catchBasisData,
                                 header.columns = TRUE,
@@ -298,9 +319,9 @@ catch_options_basis_table <- function(stock.code) {
                                 header.text.props = textProperties(font.family = "Calibri", font.weight = "normal", font.size = 9)
   )
   
-  catchBasisTable[, c("Variable", "Source"), to = "body"] = parProperties(text.align = "center", padding = 1)
-  catchBasisTable[, "Notes", to = "body"] = parProperties(text.align = "left", padding = 1)
-  setFlexTableWidths(catchBasisTable, c(4.26/2.54, 2.25/2.54, 3/2.54, 8.45/2/54))
+  catchBasisTable[, c("Source"), to = "body"] = parProperties(text.align = "center", padding = 1)
+  catchBasisTable[, c("Variable", "Notes"), to = "body"] = parProperties(text.align = "left", padding = 1)
+  setFlexTableWidths(catchBasisTable, c(4.26/2.54, 2.25/2.54, 3/2.54, 8.45/2.54))
   
   return(catchBasisTable)
 }

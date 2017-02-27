@@ -16,6 +16,12 @@ if(!dir.exists(paste0(sharePoint, "Advice/Advice2017/"))) {
   stop("Note: You must be on the ICES network and log in to SharePoint and have this drive mapped")
 }
 
+########################
+# Load Table functions #
+########################
+source("~/git/ices-dk/AdviceTemplate/table_functions.R")
+
+
 #############################################
 # Organizing stock list and section numbers #
 #############################################
@@ -37,14 +43,25 @@ rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3?$filter=Activ
 sl_ecoregion <- rawsd %>%
   select(StockCode, OldStockCode, Description, SpeciesCommonName,
          SpeciesScientificName, 
-         # SectionNumber, 
+         SectionNumber,
          DataCategory, 
          AdviceHeading = EcoRegion,
-         AdviceReleaseDate) %>%
+         AdviceReleaseDate,
+         ExpertGroup) %>%
   mutate(count = str_count(AdviceHeading, ",") + 1,
          AdviceReleaseDate = as.Date(AdviceReleaseDate, format = "%d/%m/%y"),
          PubDate = format(AdviceReleaseDate, "%e %B %Y"),
-         SectionNumber = "TO BE ADDED")
+         DraftURL = gsub("(.*?)(\\..*)", "\\1", SectionNumber),
+         ExpertURL = paste0("http://www.ices.dk/community/groups/Pages/", ExpertGroup, ".aspx"),
+         DraftURL = recode(DraftURL, "2" = paste0(sharePoint, "Advice/Advice2017/Iceland/Draft_advice/")),
+         DraftURL = recode(DraftURL, "3" = paste0(sharePoint, "Advice/Advice2017/BarentsSea/Draft_advice/")),
+         DraftURL = recode(DraftURL, "4" = paste0(sharePoint, "Advice/Advice2017/Faroes/Draft_advice/")),
+         DraftURL = recode(DraftURL, "5" = paste0(sharePoint, "Advice/Advice2017/CelticSea/Draft_advice/")),
+         DraftURL = recode(DraftURL, "6" = paste0(sharePoint, "Advice/Advice2017/NorthSea/Draft_advice/")),
+         DraftURL = recode(DraftURL, "7" = paste0(sharePoint, "Advice/Advice2017/BayOfBiscay/Draft_advice/")),
+         DraftURL = recode(DraftURL, "8" = paste0(sharePoint, "Advice/Advice2017/BalticSea/Draft_advice/")),
+         DraftURL = recode(DraftURL, "9" = paste0(sharePoint, "Advice/Advice2017/Widely/Draft_advice/")),
+         DraftURL = recode(DraftURL, "10" = paste0(sharePoint, "Advice/Advice2017/Salmon/Draft_advice/")))
 # 
 
 
@@ -83,8 +100,8 @@ sl <- sl_ecoregion %>%
          AdviceHeading = gsub("Ecoregion", "", AdviceHeading), # remove Ecoregion
          AdviceHeading = gsub(",(?=[^,]+$)", " and", AdviceHeading, perl = TRUE), # remove last comma and replace with "and"
          AdviceHeading = ifelse(count == 1,
-                                 paste0(AdviceHeading, " Ecoregion"),
-                                 paste0(AdviceHeading, " Ecoregions")),
+                                 paste0(AdviceHeading, "Ecoregion"),
+                                 paste0(AdviceHeading, "Ecoregions")),
          AdviceHeading = ifelse(count == 12,
                                  "the Northeast Atlantic and adjacent waters",
                                  AdviceHeading), 
@@ -104,10 +121,11 @@ sl <- sl_ecoregion %>%
                                  "Northeast Atlantic and Baltic Sea",
                                  AdviceHeading),
          CaptionName = gsub("\\s*\\([^\\)]+\\)", "", as.character(Description))) %>%
-  select(StockCode, Description, SectionNumber,
+  select(StockCode, Description,
          PubDate, DataCategory, AdviceHeading, CaptionName, 
-         SpeciesScientificName, OldStockCode,
-         SpeciesCommonName)
+         SpeciesScientificName, OldStockCode, ExpertGroup,
+         SpeciesCommonName, ExpertURL, DraftURL)
+
 
 # %>%
 #   ungroup() %>%
@@ -183,9 +201,12 @@ fileList <- fileList[!is.na(fileList$file.path),]
 fileList$URL <- paste0(gsub("//community.ices.dk@SSL/DavWWWRoot/", "https://community.ices.dk/", fileList$file.path), 
                        "?Web=1")
 
-####################################
-# Wrap it up and write some drafts #
-####################################
+
+
+#########################################################
+# Create Draft given the Stock List Database and tables #
+#########################################################
+#
 
 #Define some formats #
 base_text_prop <- textProperties(font.family = "Calibri",
@@ -230,39 +251,40 @@ head_italic_text_prop <- chprop(base_text_prop,
 head_italic_par_prop <- chprop(base_par_prop,
                                text.align = "justify")
 
-#########################################################
-# Create Draft given the Stock List Database and tables #
-#########################################################
-#
-
 # draftDir <- paste0(sharePoint, "/admin/AdvisoryProgramme/Personal folders/Scott/Advice_Template_Testing/drafts/")
 # draftDir <-"~/git/ices-dk/AdviceTemplate/"
 
-createDraft <- function(stock.code, output_dir = draftDir) {
 
-  stock.code <- fileList$StockCode[1]
+createDraft <- function(stock.code) {
+
   pub.date <- fileList$PubDate[fileList$StockCode %in% stock.code]
   ecoregion.name <- fileList$AdviceHeading[fileList$StockCode %in% stock.code]
-  section.number <- fileList$SectionNumber[fileList$StockCode %in% stock.code]
+  draft.url <- fileList$DraftURL[fileList$StockCode %in% stock.code]
   stock.name <- fileList$Description[fileList$StockCode %in% stock.code]
   caption.name <-  fileList$CaptionName[fileList$StockCode %in% stock.code]
   common.name <- fileList$SpeciesCommonName[fileList$StockCode %in% stock.code]
   data.category <- fileList$DataCategory[fileList$StockCode %in% stock.code]
+  url.name <- fileList$URL[fileList$StockCode %in% stock.code]
+  expert.url <- fileList$ExpertURL[fileList$StockCode %in% stock.code]
+  expert.name <- fileList$ExpertGroup[fileList$StockCode %in% stock.code]
   
-  ########################
-  # Load Table functions #
-  ########################
-  source("~/git/ices-dk/AdviceTemplate/table_functions.R")
+  ####################################
+  # Wrap it up and write some drafts #
+  ####################################
+  
   
  # Load up the proper template
-  if(sl$DataCategory[sl$StockCode %in% stock.code] %in% c(1,2)) {
+  if(data.category %in% c(1,2)) {
     template <- paste0(sharePoint, "Advice/Advice2017/Advice documents/Draft advice 2017/advice_template_2017_cat12.docx")
+    catchOptionsCaption <- "Annual catch options. All weights are in tonnes."
   }
-  if(sl$DataCategory[sl$StockCode %in% stock.code] %in% c(3,4)) {
+  if(data.category %in%  c(3,4)) {
     template <- paste0(sharePoint, "Advice/Advice2017/Advice documents/Draft advice 2017/advice_template_2017_cat34.docx")  
+    catchOptionsCaption <- "For stocks in ICES categories 3-6, one catch option is provided."
   }
-  if(sl$DataCategory[sl$StockCode %in% stock.code] %in% c(5,6)) {
+  if(data.category %in% c(5,6)) {
     template <- paste0(sharePoint, "Advice/Advice2017/Advice documents/Draft advice 2017/advice_template_2017_cat56.docx")
+    catchOptionsCaption <- "For stocks in ICES categories 3-6, one catch option is provided."
   }
   if(!file.exists(template)) {
     stop(paste0("Check your file path to make sure the category ", sl$DataCategory[sl$StockCode == stock.code],
@@ -279,16 +301,30 @@ createDraft <- function(stock.code, output_dir = draftDir) {
                            value = titlePot(ecoregion.name, pub.date),
                            par.properties = base_par_prop,
                            bookmark = "TITLE_PAGE_HEADER")
+  
+  draftDoc <- addParagraph(draftDoc, 
+                           value = pot(stock.code, format = header_text_prop),
+                           par.properties = base_par_prop,
+                           bookmark = "STOCK_CODE_HEADER")
 
   draftDoc <- addParagraph(draftDoc, 
-                           value = headingPot(stock.code, section.number, stock.name),
+                           value = pot(stock.name, format = heading_text_prop),
                            par.properties = base_par_prop,
                            bookmark = "TITLE_HEADING")
-
+  
   draftDoc <- addParagraph(draftDoc, 
-                           value = footerPot(stock.code, section.number),
+                           value = pot("For reference in drafting the advice, please find previous advice here: ",
+                                       format = base_text_prop) +
+                             pot(url.name,
+                                       format = base_text_prop,
+                                       hyperlink = url.name),
                            par.properties = base_par_prop,
-                           bookmark = "FIRST_PAGE_FOOTER")
+                           bookmark = "PREVIOUS_ADVICE_URL")
+
+  # draftDoc <- addParagraph(draftDoc, 
+  #                          value = footerPot(stock.code, section.number),
+  #                          par.properties = base_par_prop,
+  #                          bookmark = "FIRST_PAGE_FOOTER")
   
   draftDoc <- addParagraph(draftDoc, 
                            value = headerPot(stock.code, pub.date),
@@ -296,97 +332,171 @@ createDraft <- function(stock.code, output_dir = draftDir) {
                            bookmark = "SECOND_PAGE_HEADER")
   
   draftDoc <- addParagraph(draftDoc, 
-                           value = footerPot(stock.code, section.number),
+                           value = pot(stock.code, format = header_text_prop),
                            par.properties = base_par_prop,
-                           bookmark = "SECOND_PAGE_FOOTER")
+                           bookmark = "STOCK_CODE_HEADER_2")
+  
+  # draftDoc <- addParagraph(draftDoc, 
+  #                          value = footerPot(stock.code, section.number),
+  #                          par.properties = base_par_prop,
+  #                          bookmark = "SECOND_PAGE_FOOTER")
+  figCount <- 1
+  tabCount <- 1
+
   # SAG figures
   draftDoc <- addParagraph(draftDoc, 
                            value = captionPot(stock.code, 
                                               type = "Figure",
-                                              section.number = section.number,
-                                              caption.number = 1, 
+                                              # section.number = section.number,
+                                              caption.number = figCount, 
                                               caption.name = caption.name,
                                               caption.text = "Summary of the stock assessment."),
                            par.properties = base_par_prop,
                            bookmark = "STOCK_SUMMARY_FIGURE_CAPTION")
+  figCount <- figCount + 1
   # Tick-mark table
   draftDoc <- addParagraph(draftDoc, 
                            value = captionPot(stock.code, 
                                              type = "Table",
-                                             section.number = section.number,
-                                             caption.number = 1, 
+                                             # section.number = section.number,
+                                             caption.number = tabCount, 
                                              caption.name = caption.name,
                                              caption.text = "State of the stock and fishery relative to reference points."),
                            par.properties = base_par_prop,
                            bookmark = "STOCK_STATUS_TABLE_CAPTION")
+  tabCount <- tabCount + 1
+  
+  # Basis of catch option table
+
+    draftDoc <- addParagraph(draftDoc,
+                             value = captionPot(stock.code,
+                                                # section.number = section.number,
+                                                caption.number = tabCount,
+                                                type = "Table",
+                                                caption.name = caption.name,
+                                                caption.text = "The basis for the catch options."),
+                             par.properties = base_par_prop,
+                             bookmark = "CATCH_OPTIONS_BASIS_TABLE_CAPTION")
+    tabCount <- tabCount + 1
+    
+    if(data.category %in% c(1, 2)) {  
+    draftDoc <- addParagraph(draftDoc,
+                             value = captionPot(stock.code,
+                                                # section.number = section.number,
+                                                caption.number = figCount,
+                                                type = "Figure",
+                                                caption.name = caption.name,
+                                                caption.text = "Historical assessment results."),
+                             par.properties = base_par_prop,
+                             bookmark = "HISTORICAL_ASSESSMENT_FIGURE_CAPTION")
+
+
   # Catch options table
   draftDoc <- addParagraph(draftDoc, 
                            value = captionPot(stock.code, 
                                               type = "Table",
-                                              section.number = section.number,
-                                              caption.number = 2, 
+                                              # section.number = section.number,
+                                              caption.number = tabCount, 
                                               caption.name = caption.name,
-                                              caption.text = "For stocks in ICES categories 3-6, one catch option is provided"),
+                                              caption.text = catchOptionsCaption),
                            par.properties = base_par_prop,
-                           bookmark = "CATCH_OPTIONS_BASIS_TABLE_CAPTION")
+                           bookmark = "CATCH_OPTIONS_TABLE_CAPTION")
+  tabCount <- tabCount + 1
+  }
   # Basis of the advice
   draftDoc <- addParagraph(draftDoc, 
                            value = captionPot(stock.code, 
                                               type = "Table",
-                                              section.number = section.number,
-                                              caption.number = 3, 
+                                              # section.number = section.number,
+                                              caption.number = tabCount, 
                                               caption.name = caption.name,
                                               caption.text = "The basis of the advice."),
                            par.properties = base_par_prop,
                            bookmark = "ADVICE_BASIS_TABLE_CAPTION")
+  tabCount <- tabCount + 1
+
+  # Basis of catch option table
+  if(data.category %in% c(1,2)) {  
+    draftDoc <- addParagraph(draftDoc,
+                             value = captionPot(stock.code,
+                                                type = "Table",
+                                                # section.number = section.number,
+                                                caption.number = tabCount,
+                                                caption.name = caption.name,
+                                                caption.text = "Reference points, values, and their technical basis."),
+                             par.properties = base_par_prop,
+                             bookmark = "REFERENCE_POINT_TABLE_CAPTION")
+    tabCount <- tabCount + 1
+  }
+  
   # Basis of the assessment
-  draftDoc <- addParagraph(draftDoc, 
-                           value = captionPot(stock.code, 
+  draftDoc <- addParagraph(draftDoc,
+                           value = captionPot(stock.code,
                                               type = "Table",
-                                              section.number = section.number,
-                                              caption.number = 4, 
+                                              # section.number = section.number,
+                                              caption.number = tabCount,
                                               caption.name = caption.name,
-                                              caption.text = "The basis of the assessment"),
+                                              caption.text = "Basis of assessment and advice."),
                            par.properties = base_par_prop,
                            bookmark = "ASSESSMENT_BASIS_TABLE_CAPTION")
+  tabCount <- tabCount + 1
+  
   
   # Advice history
   draftDoc <- addParagraph(draftDoc,
                            value = captionPot(stock.code,
                                               type = "Table",
-                                              section.number = section.number,
-                                              caption.number = 5,
+                                              # section.number = section.number,
+                                              caption.number = tabCount,
                                               caption.name = caption.name,
                                               caption.text = "ICES advice and official landings. All weights are in thousand tonnes."),
                            par.properties = base_par_prop,
                            bookmark = "ADVICE_HISTORY_TABLE_CAPTION")
+  tabCount <- tabCount + 1
   
-  # Catch Distribution history
+  # Catch Distribution
   draftDoc <- addParagraph(draftDoc, 
                            value = captionPot(stock.code, 
                                               type = "Table",
-                                              section.number = section.number,
-                                              caption.number = 6, 
+                                              # section.number = section.number,
+                                              caption.number = tabCount, 
                                               caption.name = caption.name, 
-                                              caption.text = "Catch distribution by fleet in 2017 as estimated by ICES."),
+                                              caption.text = "Catch distribution by fleet in 2016 as estimated by ICES."),
                            par.properties = base_par_prop,
                            bookmark = "CATCH_DISTRIBUTION_TABLE_CAPTION")
+  tabCount <- tabCount + 1
   
-  # Catch Distribution history
+  # Catch history
   draftDoc <- addParagraph(draftDoc, 
                            value = captionPot(stock.code, 
                                               type = "Table",
-                                              section.number = section.number,
-                                              caption.number = 7, 
+                                              # section.number = section.number,
+                                              caption.number = tabCount, 
                                               caption.name = caption.name, 
                                               caption.text = "History of commercial catch and landings; both the official and ICES estimated values are presented by area for each country participating in the fishery. All weights are in tonnes."),
                            par.properties = base_par_prop,
                            bookmark = "CATCH_HISTORY_TABLE_CAPTION")
   
+  tabCount <- tabCount + 1
+  if(data.category %in% c(1,2)) {  
+    draftDoc <- addParagraph(draftDoc,
+                             value = captionPot(stock.code,
+                                                type = "Table",
+                                                # section.number = section.number,
+                                                caption.number = tabCount,
+                                                caption.name = caption.name,
+                                                caption.text = "Assessment summary. Weights are in tonnes."),
+                             par.properties = base_par_prop,
+                             bookmark = "ASSESSMENT_SUMMARY_TABLE_CAPTION")
+    tabCount <- tabCount + 1
+  }
+  
+  if(data.category %in% c(5,6))
   draftDoc <- addParagraph(draftDoc, 
                            value = summaryPot(common.name),
                            par.properties = base_par_prop,
                            bookmark = "COMMON_NAME")
+  # }
 
   # Add tables
   # Advice basis
@@ -395,26 +505,42 @@ createDraft <- function(stock.code, output_dir = draftDir) {
                            bookmark = "ADVICE_BASIS_TABLE")
   # Assessment basis
   draftDoc <- addFlexTable(draftDoc,
-                           flextable = assessment_basis_table(stock.code, data.category),
+                           flextable = assessment_basis_table(stock.code, data.category,
+                                                              expert.name, expert.url),
                            bookmark = "ASSESSMENT_BASIS_TABLE")
   # Advice history
   draftDoc <- addFlexTable(draftDoc,
                            flextable = advice_history_table(stock.code, data.category),
                            bookmark = "ADVICE_HISTORY_TABLE")
-  
+  # Catch options
+  if(data.category %in% c(1, 2)) {
+  draftDoc <- addFlexTable(draftDoc,
+                           flextable = catch_options_basis_table(stock.code),
+                           bookmark = "CATCH_OPTIONS_BASIS_TABLE")
+  }  
+
   # Clean up bookmarks
   delete_tables <-  c("ADVICE_BASIS_TABLE", "ADVICE_HISTORY_TABLE",
                       "ADVICE_HISTORY_TABLE_2", "ADVICE_HISTORY_TABLE_3",
                       "ADVICE_HISTORY_TABLE_4", "ADVICE_HISTORY_TABLE_5",
-                      "ADVICE_HISTORY_TABLE_6", "ASSESSMENT_BASIS_TABLE")
+                      "ADVICE_HISTORY_TABLE_6", "ASSESSMENT_BASIS_TABLE",
+                      "CATCH_OPTIONS_BASIS_TABLE")
   
   lapply(delete_tables, function(x) deleteBookmark(draftDoc, x))
   
 
   writeDoc(doc = draftDoc,
-           file = paste0("~/git/ices-dk/AdviceTemplate/", stock.code, ".docx"))
+           file = paste0(draft.url, stock.code, ".docx"))
   
-# }
+}
+
+
+stock.code <- fileList$StockCode[fileList$ExpertGroup == "NIPAG"][1]
+createDraft(stock.code)
+
+
+
+
   # adviceHistoryList <- advice_history_table(stock.code, data.category)
   # adviceHistoryNames <- grep("T", names(adviceHistoryList), value = TRUE)
   # 
@@ -428,6 +554,7 @@ createDraft <- function(stock.code, output_dir = draftDir) {
   # }
   
   # 
+  catch_options_basis_table(stock.code)
   # assessmentBasisList <- assessment_basis_table(stock.code, data.category)
   # assessmentBasisNames <- names(assessmentBasisList)
   # 
@@ -444,19 +571,19 @@ createDraft <- function(stock.code, output_dir = draftDir) {
   
   if(data.category %in% c(1,2)) {
     
-    draftDoc <- addParagraph(draftDoc, 
-                             value = captionPot(stock.code,
-                                                section.number = section.number,
-                                                caption.number = 3,
-                                                type = "Table",
-                                                caption.name = caption.name,
-                                                caption.text = "CATCH OPTIONS TABLE"),
-                             par.properties = base_par_prop,
-                             bookmark = "CATCH_OPTIONS_BASIS_TABLE_CAPTION")
+    # draftDoc <- addParagraph(draftDoc, 
+    #                          value = captionPot(stock.code,
+    #                                             # section.number = section.number,
+    #                                             caption.number = 3,
+    #                                             type = "Table",
+    #                                             caption.name = caption.name,
+    #                                             caption.text = "CATCH OPTIONS TABLE"),
+    #                          par.properties = base_par_prop,
+    #                          bookmark = "CATCH_OPTIONS_BASIS_TABLE_CAPTION")
     
-    draftDoc <- addFlexTable(draftDoc,
-                 flextable = catch_options_basis_table(stock.code),
-                 bookmark = "CATCH_OPTIONS_BASIS_TABLE")
+    # draftDoc <- addFlexTable(draftDoc,
+    #              flextable = catch_options_basis_table(stock.code),
+    #              bookmark = "CATCH_OPTIONS_BASIS_TABLE")
   }
   
   # writeDoc(doc = draftDoc,
