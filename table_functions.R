@@ -4,15 +4,7 @@
 # Wrappers to take tables from previous advice and to format them so they can be
 # added to the draft documents
 
-#############################
-# Install and load packages #
-#############################
-# library(readxl) # not necessary once SLD is up and running
-# library(tidyverse)
-# library(docxtractr)
-# library(ReporteRs)
-
-#############
+############
 # FUNCTIONS #
 ############
 
@@ -184,7 +176,7 @@ footerPot <- function(stock.code, section.number) {
 }
 
 headerPot <- function(stock.code, pub.date) {
-  hPot <- pot("ICES Advice on fishing opportunities, catch, and effort\t\t",
+  hPot <- pot("ICES Advice on fishing opportunities, catch, and effort\t\t Published ",
               format = header_text_prop) +
     pot(pub.date,
         format = header_text_prop)
@@ -269,11 +261,10 @@ assessment_basis_table <- function(stock.code, data.category, expert.name, exper
                                          " (ICES, UPDATE REFERENCE).")
   assessmentBasisData$VALUE[1:2] <- gsub("ICES, 201[5-6].*?", "ICES, 2017", assessmentBasisData$VALUE[1:2])
   
- 
   if(grepl(expert.name, assessmentBasisData$VALUE[7])) {
-    pot_link <- pot(gsub(paste0("*\\([", expert.name, "\\)]+\\)\\."), "", assessmentBasisData$VALUE[7]),
+    pot_link <- pot(gsub(paste0("*\\([", expert.name, "\\)]+\\)*"), "", assessmentBasisData$VALUE[7]),
                     format = fig_base_text_prop) +
-                pot(paste0("(", expert.name, ")."),
+                pot(paste0("(", expert.name, ")"),
                     hyperlink = expert.url,
                     format = fig_base_text_prop)
     assessmentBasisData$VALUE[7] <- ""
@@ -303,6 +294,8 @@ catch_options_basis_table <- function(stock.code) {
     catchBasisData <- catchBasisData[[1]]
   }
   
+  colnames(catchBasisData) <- gsub("[[:punct:]]", "", colnames(catchBasisData))
+  
   catchBasisData$Variable <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.character(catchBasisData$Variable))
   catchBasisData$Variable <- gsub("\\s*201[0-9]+", " (UPDATE)", as.character(catchBasisData$Variable))
   catchBasisData$Source <- gsub("201[5-6].*?", "2017", catchBasisData$Source)
@@ -326,8 +319,7 @@ catch_options_basis_table <- function(stock.code) {
   return(catchBasisTable)
 }
 
-# stock.code <- fileList$StockCode[2]
-# data.category <- 1
+
 advice_history_table <- function(stock.code,
                                  data.category) {
   
@@ -360,12 +352,14 @@ advice_history_table <- function(stock.code,
                                      body.par.props =  parProperties(text.align = "right", padding = 1),
                                      body.text.props = textProperties(font.family = "Calibri", font.weight = "normal", font.size = 9),
                                      header.cell.props = cellProperties(background.color = "#E8EAEA"),
-                                     header.par.props =  parProperties(text.align = "center", padding = 1),
+                                     header.par.props =  parProperties(text.align = "right", padding = 1),
                                      header.text.props = textProperties(font.family = "Calibri", font.weight = "normal", font.size = 9)
     )
     
     adviceHistoryTable[, 1, to = "body"] = parProperties(text.align = "center", padding = 1)
     adviceHistoryTable[, 2, to = "body"] = parProperties(text.align = "left", padding = 1)
+    adviceHistoryTable[, 1, to = "header"] = parProperties(text.align = "center", padding = 1)
+    adviceHistoryTable[, 2, to = "header"] = parProperties(text.align = "left", padding = 1)
     setFlexTableWidths(adviceHistoryTable, rep((17.91/2.54) / ncol(adviceHistoryData[[i]]),
                                                ncol(adviceHistoryData[[i]])))
     adviceHistoryTable[[i]] <- adviceHistoryTable
