@@ -47,8 +47,13 @@ tableData <- function(stock.code,
     }
     
     if(length(match_variable) == 0) {
-      print(stock.code)
-      stop(paste0("Not able to find a matching column header in ", adviceTable))
+      cat(paste0("Not able to find a matching column header in ", adviceTable,
+                  " , will just insert a generic basis of the catch options table."))
+      generic_table <- data.frame(Variable = c("F (UPDATE)", "SSB (UPDATE)", "R (UPDATE)", "Catch (UPDATE)"),
+                 Value = rep(NA, 4),
+                 Source = rep("ICES (2017)", 4),
+                 Notes = rep(NA, 4))
+      return(generic_table)
     }
     tbl_number <- match_variable
   }
@@ -262,7 +267,7 @@ assessment_basis_table <- function(stock.code, data.category, expert.name, exper
   assessmentBasisData$VALUE[1:2] <- gsub("ICES, 201[5-6].*?", "ICES, 2017", assessmentBasisData$VALUE[1:2])
   
   if(grepl(expert.name, assessmentBasisData$VALUE[7])) {
-    pot_link <- pot(gsub(paste0("*\\([", expert.name, "\\)]+\\)*"), "", assessmentBasisData$VALUE[7]),
+    pot_link <- pot(gsub(paste0("*\\([", expert.name, "\\)]+\\).*"), "", assessmentBasisData$VALUE[7]),
                     format = fig_base_text_prop) +
                 pot(paste0("(", expert.name, ")"),
                     hyperlink = expert.url,
