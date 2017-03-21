@@ -131,12 +131,13 @@ fileList2016$file.path <- sprintf(paste0(sharePoint,
                                   fileList2016$StockCode)
 fileList2016$StockCode <- tolower(gsub("\\.docx*", "", fileList2016$StockCode))
 
-# Do a little clean up of inconsistent file names
-sl$OldStockCode <- gsub("pan", "pand", sl$OldStockCode)
-
 # Join with the SLD so we can have file paths for each stock
 fileStock2016 <- sl %>%
+# Do a little clean up of inconsistent file names
+  mutate(OldStockCode = gsub("pan", "pand", OldStockCode)) %>% 
   left_join(fileList2016, by = c("OldStockCode" = "StockCode")) 
+
+fileStock2016$file.path[fileStock2016$OldStockCode == "sal-2431"] <-  "//community.ices.dk@SSL/DavWWWRoot/Advice/Advice2016/BalticSea/Released_Advice/sal-2231.docx"
 
 fileStock2015 <- fileStock2016 %>%
   filter(is.na(file.path)) %>%
@@ -201,8 +202,7 @@ head_italic_text_prop <- chprop(base_text_prop,
 head_italic_par_prop <- chprop(base_par_prop,
                                text.align = "justify")
 
-
-createDraft <- function(stock.code) {
+createDraft <- function(stock.code, file_path = NULL) {
 
   pub.date <- fileList$PubDate[fileList$StockCode %in% stock.code]
   ecoregion.name <- fileList$AdviceHeading[fileList$StockCode %in% stock.code]
@@ -238,6 +238,7 @@ createDraft <- function(stock.code) {
     template <- paste0(sharePoint, "Advice/Advice2017/Advice documents/Draft advice 2017 - Secretariat use/advice_template_2017_cat56.docx")
     catchOptionsCaption <- "For stocks in ICES categories 3-6, one catch option is provided."
   }
+  
   if(!file.exists(template)) {
     stop(paste0("Check your file path to make sure the category ", sl$DataCategory[sl$StockCode == stock.code],
                 " template is available.\nCurrent file path: ",
@@ -457,12 +458,16 @@ createDraft <- function(stock.code) {
   
   lapply(delete_tables, function(x) deleteBookmark(draftDoc, x))
   
+  if(is.null(file_path)){
+  file_path <- paste0(draft.url, stock.code, ".docx")
+  }
 
   writeDoc(doc = draftDoc,
-           file = paste0(draft.url, stock.code, ".docx"))
+           file = file_path)
   
+
 cat(paste0("Check-in you new advice draft here: ",
-           paste0(draft.url, stock.code, ".docx"), 
+           file_path, 
            " . \nDon't forget to add the ADG (", 
            adg.name, ") and EG (",
            expert.name,
@@ -471,6 +476,8 @@ cat(paste0("Check-in you new advice draft here: ",
 }
 
 
-stock.code <- fileList$StockCode[fileList$ExpertGroup == "HAWG" &
-                                   !grepl(pattern = c("February"), fileList$PubDate)]
-createDraft(stock.code[1])
+stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGBAST"]
+
+next.code <- fileList$StockCode[fileList$ExpertGroup == "WGBFAS"]
+
+lapply(stock.code, function(x) createDraft(x, file_path = NULL))
