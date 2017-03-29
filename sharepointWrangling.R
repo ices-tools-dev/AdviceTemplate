@@ -434,8 +434,9 @@ createDraft <- function(stock.code, file_path = NULL) {
                            value = summaryPot(common.name),
                            par.properties = base_par_prop,
                            bookmark = "COMMON_NAME")
-
-  # Add tables
+  ##############
+  # Add tables #
+  #############
   # Advice basis
   draftDoc <- addFlexTable(draftDoc,
                            flextable = advice_basis_table(stock.code),
@@ -483,10 +484,9 @@ cat(paste0("Check-in you new advice draft here: ",
 }
 
 
-stock.code <- fileList[fileList$ExpertGroup == "WGBFAS", c("StockCode", "AdviceDraftingGroup", "DraftURL")]
-write.csv(x = stock.code, file = "~/jette_check.csv", row.names = FALSE)
+stock.code <- "her.27.3031"
 
-stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGBFAS"]
+stock.code <- fileList$StockCode[fileList$ExpertGroup == "AFWG"]
 
 lapply(stock.code, function(x) createDraft(x, file_path = paste0("~/Advice/test_sheets/TEST_", x, ".docx")))
 lapply(stock.code, function(x) createDraft(x, file_path = NULL))
