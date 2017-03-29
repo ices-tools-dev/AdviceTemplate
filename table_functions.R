@@ -17,11 +17,20 @@ tableData <- function(stock.code,
                       header = FALSE) {
   
   fileName <- fileList$file.path[fileList$StockCode == stock.code]
+  
+  if(is.na(fileName)) {
+    cat(paste0("file.path is NA for ", stock.code,
+               ", generic tables will be generated.\n"))
+    columnNames <- list()
+  }
+  
+  if(!is.na(fileName)) {
   doc <- read_docx(fileName)
   
   tableCount <- unlist(lapply(fileName, function(x) docx_tbl_count(doc)))
   columnNames <- lapply(seq(1: tableCount),
                         function(x) colnames(docx_extract_tbl(doc, tbl_number = x, header = TRUE)))
+  }
   
   if(adviceTable %in% c("stockExploitationTable", "assessmentSummaryTable")) {
     stop(paste0("The ", adviceTable, " is provided by SAG.\n"))
@@ -30,6 +39,11 @@ tableData <- function(stock.code,
   if(adviceTable %in% c("catchDistributionTable", "catchHistoryTable")) {
     stop(paste0("The ", adviceTable, " is to be drafted by the stock assessor.\n"))
   }
+  
+  if(adviceTable %in% c("referencePointsTable")) {
+    stop(paste0("The ", adviceTable, " should be in the advice template.\n"))
+  }
+  
   
   #######################
   # Catch Options Basis #
@@ -48,7 +62,7 @@ tableData <- function(stock.code,
     
     if(length(match_variable) == 0) {
       cat(paste0("Not able to find a matching column header in ", adviceTable,
-                  " , will just insert a generic basis of the catch options table."))
+                  ", will just insert a generic basis of the catch options table.\n"))
       generic_table <- data.frame(Variable = c("F (UPDATE)", "SSB (UPDATE)", "R (UPDATE)", "Catch (UPDATE)"),
                  Value = rep(NA, 4),
                  Source = rep("ICES (2017)", 4),
@@ -72,33 +86,36 @@ tableData <- function(stock.code,
     }
     
     if(length(match_advice_basis) == 0) {
-      print(stock.code)
-      stop(paste0("Not able to find a matching column header in ", adviceTable))
+      cat(paste0("Not able to find a matching column header in ", adviceTable,
+                 ", will just insert a generic basis of the advice table.\n"))
+      generic_table <- data.frame(V1 = c("Advice basis", "Management plan"),
+                                  V2 = c("", ""))
+      return(generic_table)
     }
     tbl_number <- match_advice_basis
   }
   
-  ####################  
-  # Reference points #
-  ####################
-  if(adviceTable %in% c("referencePointsTable")) {
-    if(fileList$DataCategory[fileList$StockCode == stock.code] >= 2) {
-      stop(paste0(adviceTable, " is only available for Category 1 and 2 stocks."))
-    }
-    match_framework <- grep("framework",  tolower(columnNames))
-    
-    if(length(match_framework) >= 2) {
-      print(stock.code)
-      print(match_framework)
-      stop(paste0("Found multiple matching column headers in ", adviceTable))
-    }
-    
-    if(length(match_framework) == 0) {
-      print(stock.code)
-      stop(paste0("Not able to find a matching column header in ", adviceTable))
-    }
-    tbl_number <- match_framework
-  }
+  # ####################  
+  # # Reference points #
+  # ####################
+  # if(adviceTable %in% c("referencePointsTable")) {
+  #   if(fileList$DataCategory[fileList$StockCode == stock.code] >= 2) {
+  #     stop(paste0(adviceTable, " is only available for Category 1 and 2 stocks."))
+  #   }
+  #   match_framework <- grep("framework",  tolower(columnNames))
+  #   
+  #   if(length(match_framework) >= 2) {
+  #     print(stock.code)
+  #     print(match_framework)
+  #     stop(paste0("Found multiple matching column headers in ", adviceTable))
+  #   }
+  #   
+  #   if(length(match_framework) == 0) {
+  #     print(stock.code)
+  #     stop(paste0("Not able to find a matching column header in ", adviceTable))
+  #   }
+  #   tbl_number <- match_framework
+  # }
   
   ###########################
   # Basis of the assessment #
@@ -114,9 +131,20 @@ tableData <- function(stock.code,
     }
     
     if(length(match_ices_stock) == 0) {
-      print(stock.code)
-      stop(paste0("Not able to find a matching column header in ", adviceTable))
+      cat(paste0("Not able to find a matching column header in ", adviceTable,
+                 ", will just insert a generic basis of the assessment table.\n"))
+      generic_table <- data.frame(V1 = c("ICES stock data category",
+                                         "Assessment type",
+                                         "Input data",
+                                         "Discards and bycatch",
+                                         "Indicators",
+                                         "Other information",
+                                         "Working group"),
+                                  V2 = rep(NA, 7),
+                                  stringsAsFactors = FALSE)
+      return(generic_table)
     }
+    
     tbl_number <- match_ices_stock
   }
   
@@ -133,10 +161,21 @@ tableData <- function(stock.code,
     #   stop(paste0("Found multiple matching column headers in ", adviceTable))
     # }
     # 
-    # if(length(match_ices_advice) == 0) {
-    #   print(stock.code)
-    #   stop(paste0("Not able to find a matching column header in ", adviceTable))
-    # }
+    if(length(match_ices_advice) == 0) {
+      cat(paste0("Not able to find a matching column header in ", adviceTable,
+                 ", will just insert a generic history of advice table.\n"))
+      generic_table <- list(T1 = data.frame("Year" = rep(NA, 7),
+                                            "ICES advice" = rep(NA, 7),
+                                            "Predicted catch corresponding to advice"= rep(NA, 7),
+                                            "Predicted landings corresponding to advice"= rep(NA, 7),
+                                            "Agreed TAC"= rep(NA, 7),
+                                            "ICES landings"= rep(NA, 7),
+                                            "ICES discards"= rep(NA, 7),
+                                            stringsAsFactors = FALSE,
+                                            check.names = FALSE)
+      )
+      return(generic_table)
+    }
     tbl_number <- match_ices_advice
   }
   
@@ -274,6 +313,15 @@ assessment_basis_table <- function(stock.code, data.category, expert.name, exper
                     format = fig_base_text_prop)
     assessmentBasisData$VALUE[7] <- ""
   }
+  if(!grepl(expert.name, assessmentBasisData$VALUE[7])) {
+    pot_link <- pot("Add working group name ",
+                    format = fig_base_text_prop) +
+      pot(paste0("(", expert.name, ")"),
+          hyperlink = expert.url,
+          format = fig_base_text_prop)
+    assessmentBasisData$VALUE[7] <- ""
+  }
+  
   
   assessmentBasisTable <-  FlexTable(assessmentBasisData, header.columns = FALSE,
                                      body.cell.props = cellProperties(padding.left = 2, padding.right = 2, padding.bottom = 0),
@@ -340,14 +388,15 @@ advice_history_table <- function(stock.code,
   
   adviceHistoryTable <- vector("list", length(catchTables))
   names(adviceHistoryTable) <- catchTables
-  # i <- "T7"
+  # i <- "T1"
   for(i in catchTables) {
 
-    temprow <- data.frame(matrix(c(rep.int(NA, length(adviceHistoryData[[i]]))),
+    temprow <- data.frame(matrix(c(rep.int(NA, ncol(adviceHistoryData[[i]]))),
                                  nrow = numYears,
-                                 ncol = length(adviceHistoryData[[i]])))
+                                 ncol = ncol(adviceHistoryData[[i]])),
+                          stringsAsFactors = FALSE)
     colnames(temprow) <- colnames(adviceHistoryData[[i]])
-    
+
     temprow[1] <- seq(from = 2018, length = numYears)
     adviceHistoryData[[i]] <- rbind(adviceHistoryData[[i]],
                                temprow)
