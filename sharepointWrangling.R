@@ -28,7 +28,10 @@ source("~/git/ices-dk/AdviceTemplate/table_functions.R")
 rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3?$filter=ActiveYear%20eq%202017")$value
 
 sl_ecoregion <- rawsd %>%
-  select(StockCode, OldStockCode, Description, SpeciesCommonName,
+  select(StockCode = StockKeyLabel,
+         OldStockCode = PreviousStockKeyLabel, 
+         Description = StockKeyDescription, 
+         SpeciesCommonName,
          SpeciesScientificName, 
          SectionNumber,
          DataCategory, 
@@ -37,6 +40,9 @@ sl_ecoregion <- rawsd %>%
          ExpertGroup, 
          AdviceDraftingGroup) %>%
   mutate(count = str_count(AdviceHeading, ",") + 1,
+         SectionNumber = ifelse(StockCode == "her.27.3031",
+                                "8.0.0",
+                                SectionNumber),
          AdviceReleaseDate = as.Date(AdviceReleaseDate, format = "%d/%m/%y"),
          PubDate = format(AdviceReleaseDate, "%e %B %Y"),
          DraftURL = gsub("(.*?)(\\..*)", "\\1", SectionNumber),
@@ -150,10 +156,11 @@ fileStock2015$file.path[fileStock2015$OldStockCode == "nep-oth-4"] <-  "//commun
 
 fileList <- rbind(fileStock2015, fileStock2016[!is.na(fileStock2016$file.path),])
 
-outList <- fileList[is.na(fileList$file.path),]
-fileList <- fileList[!is.na(fileList$file.path),]
-fileList$URL <- paste0(gsub("//community.ices.dk@SSL/DavWWWRoot/", "https://community.ices.dk/", fileList$file.path), 
-                       "?Web=1")
+# outList <- fileList[is.na(fileList$file.path),]
+# fileList <- fileList[!is.na(fileList$file.path),]
+fileList$URL <- ifelse(is.na(fileList$file.path),
+                       NA,
+                       paste0(gsub("//community.ices.dk@SSL/DavWWWRoot/", "https://community.ices.dk/", fileList$file.path), "?Web=1"))
 
 #########################################################
 # Create Draft given the Stock List Database and tables #
@@ -476,8 +483,10 @@ cat(paste0("Check-in you new advice draft here: ",
 }
 
 
-stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGBAST"]
+stock.code <- fileList[fileList$ExpertGroup == "WGBFAS", c("StockCode", "AdviceDraftingGroup", "DraftURL")]
+write.csv(x = stock.code, file = "~/jette_check.csv", row.names = FALSE)
 
-next.code <- fileList$StockCode[fileList$ExpertGroup == "WGBFAS"]
+stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGBFAS"]
 
+lapply(stock.code, function(x) createDraft(x, file_path = paste0("~/Advice/test_sheets/TEST_", x, ".docx")))
 lapply(stock.code, function(x) createDraft(x, file_path = NULL))
