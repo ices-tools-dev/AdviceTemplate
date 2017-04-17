@@ -484,9 +484,11 @@ cat(paste0("Check-in you new advice draft here: ",
 }
 
 
-stock.code <- "her.27.3031"
+stock.code <- "lin.27.5a"
 
-stock.code <- fileList$StockCode[fileList$ExpertGroup == "AFWG"]
+stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGDEEP"]
 
 lapply(stock.code, function(x) createDraft(x, file_path = paste0("~/Advice/test_sheets/TEST_", x, ".docx")))
 lapply(stock.code, function(x) createDraft(x, file_path = NULL))
+
+fileList[fileList$ExpertGroup == "WGDEEP", c("StockCode", "ExpertGroup", "AdviceDraftingGroup")]
