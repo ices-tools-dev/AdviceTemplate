@@ -312,8 +312,8 @@ assessment_basis_table <- function(stock.code, data.category, expert.name, exper
                     hyperlink = expert.url,
                     format = fig_base_text_prop)
     assessmentBasisData$VALUE[7] <- ""
-  }
-  if(!grepl(expert.name, assessmentBasisData$VALUE[7])) {
+  } else {
+  #if(!grepl(expert.name, assessmentBasisData$VALUE[7])) {
     pot_link <- pot("Add working group name ",
                     format = fig_base_text_prop) +
       pot(paste0("(", expert.name, ")"),
