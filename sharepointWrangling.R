@@ -2,12 +2,15 @@ rm(list = ls())
 #############################
 # Install and load packages #
 #############################
-# library(readxl) # not necessary once SLD is up and running
-library(tidyverse)
+
+# install.packages("rJava")
+# Download Java
+# Sys.setenv(JAVA_HOME='C:/Program Files/Java/jre1.8.0_131')
 library(docxtractr)
 library(ReporteRs)
 library(jsonlite)
 library(stringr)
+library(dplyr)
 # library(icesSharePoint)
 
 # Note: You must log in to SharePoint and have this drive mapped
@@ -25,9 +28,13 @@ source("~/git/ices-dk/AdviceTemplate/table_functions.R")
 #############################################
 # Organizing stock list and section numbers #
 #############################################
-rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3?$filter=ActiveYear%20eq%202017")$value
+# rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3?$filter=ActiveYear%20eq%202017")$value
+rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value
+
 
 sl_ecoregion <- rawsd %>%
+  filter(ActiveYear == 2017,
+         YearOfNextAssessment == 2017) %>% 
   select(StockCode = StockKeyLabel,
          OldStockCode = PreviousStockKeyLabel, 
          Description = StockKeyDescription, 
@@ -484,11 +491,12 @@ cat(paste0("Check-in you new advice draft here: ",
 }
 
 
-stock.code <- "lin.27.5a"
+stock.code <- "had.27.1-2"
 
-stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGDEEP"]
+stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGBIE"]
+stock.code <- stock.code[!stock.code == "nep.fu.13"]
 
 lapply(stock.code, function(x) createDraft(x, file_path = paste0("~/Advice/test_sheets/TEST_", x, ".docx")))
 lapply(stock.code, function(x) createDraft(x, file_path = NULL))
 
-fileList[fileList$ExpertGroup == "WGDEEP", c("StockCode", "ExpertGroup", "AdviceDraftingGroup")]
+fileList[fileList$ExpertGroup == "WGBIE", c("StockCode", "ExpertGroup", "AdviceDraftingGroup")]
