@@ -14,7 +14,7 @@ library(dplyr)
 # library(icesSharePoint)
 
 # Note: You must log in to SharePoint and have this drive mapped
-sharePoint <- "//community.ices.dk@SSL/DavWWWRoot/"
+sharePoint <- "//community.ices.dk/DavWWWRoot/"
 if(!dir.exists(paste0(sharePoint, "Advice/Advice2017/"))) {
   stop("Note: You must be on the ICES network and log in to SharePoint and have this drive mapped")
 }
@@ -150,16 +150,16 @@ fileStock2016 <- sl %>%
   mutate(OldStockCode = gsub("pan", "pand", OldStockCode)) %>% 
   left_join(fileList2016, by = c("OldStockCode" = "StockCode")) 
 
-fileStock2016$file.path[fileStock2016$OldStockCode == "sal-2431"] <-  "//community.ices.dk@SSL/DavWWWRoot/Advice/Advice2016/BalticSea/Released_Advice/sal-2231.docx"
+fileStock2016$file.path[fileStock2016$OldStockCode == "sal-2431"] <-  "//community.ices.dk/DavWWWRoot/Advice/Advice2016/BalticSea/Released_Advice/sal-2231.docx"
 
 fileStock2015 <- fileStock2016 %>%
   filter(is.na(file.path)) %>%
   select(-file.path) %>%
   left_join(fileList2015, by = c("OldStockCode" = "StockCode")) 
 
-fileStock2015$file.path[fileStock2015$OldStockCode == "nep-oth-6a"] <-  "//community.ices.dk@SSL/DavWWWRoot/Advice/Advice2015/CelticSea/Released_Advice/nep-oth-6a_FOR AUTUMN.docx"
-fileStock2015$file.path[fileStock2015$OldStockCode == "nep-oth-7"] <-  "//community.ices.dk@SSL/DavWWWRoot/Advice/Advice2015/CelticSea/Released_Advice/nep-oth-7_FOR AUTUMN.docx"
-fileStock2015$file.path[fileStock2015$OldStockCode == "nep-oth-4"] <-  "//community.ices.dk@SSL/DavWWWRoot/Advice/Advice2015/NorthSea/Released_Advice/nep-oth.docx"
+fileStock2015$file.path[fileStock2015$OldStockCode == "nep-oth-6a"] <-  "//community.ices.dk/DavWWWRoot/Advice/Advice2015/CelticSea/Released_Advice/nep-oth-6a_FOR AUTUMN.docx"
+fileStock2015$file.path[fileStock2015$OldStockCode == "nep-oth-7"] <-  "//community.ices.dk/DavWWWRoot/Advice/Advice2015/CelticSea/Released_Advice/nep-oth-7_FOR AUTUMN.docx"
+fileStock2015$file.path[fileStock2015$OldStockCode == "nep-oth-4"] <-  "//community.ices.dk/DavWWWRoot/Advice/Advice2015/NorthSea/Released_Advice/nep-oth.docx"
 
 fileList <- rbind(fileStock2015, fileStock2016[!is.na(fileStock2016$file.path),])
 
@@ -167,7 +167,7 @@ fileList <- rbind(fileStock2015, fileStock2016[!is.na(fileStock2016$file.path),]
 # fileList <- fileList[!is.na(fileList$file.path),]
 fileList$URL <- ifelse(is.na(fileList$file.path),
                        NA,
-                       paste0(gsub("//community.ices.dk@SSL/DavWWWRoot/", "https://community.ices.dk/", fileList$file.path), "?Web=1"))
+                       paste0(gsub("//community.ices.dk/DavWWWRoot/", "https://community.ices.dk/", fileList$file.path), "?Web=1"))
 
 #########################################################
 # Create Draft given the Stock List Database and tables #
@@ -215,7 +215,7 @@ head_italic_text_prop <- chprop(base_text_prop,
 
 head_italic_par_prop <- chprop(base_par_prop,
                                text.align = "justify")
-
+stock.code = stock.code[1]
 createDraft <- function(stock.code, file_path = NULL) {
 
   pub.date <- fileList$PubDate[fileList$StockCode %in% stock.code]
@@ -231,9 +231,14 @@ createDraft <- function(stock.code, file_path = NULL) {
   adg.name <- fileList$AdviceDraftingGroup[fileList$StockCode %in% stock.code]
   
   
-  if(file.exists(paste0(draft.url, stock.code, ".docx"))) {
+  if(is.null(file_path)){
+    file_path <- paste0(draft.url, stock.code, ".docx")
+  }
+  
+  if(file.exists(file_path)) {
     stop("WATCH OUT! You are trying to over-write a file!!!")
   }
+  
   ####################################
   # Wrap it up and write some drafts #
   ####################################
@@ -473,9 +478,7 @@ createDraft <- function(stock.code, file_path = NULL) {
   
   lapply(delete_tables, function(x) deleteBookmark(draftDoc, x))
   
-  if(is.null(file_path)){
-  file_path <- paste0(draft.url, stock.code, ".docx")
-  }
+
 
   writeDoc(doc = draftDoc,
            file = file_path)
@@ -491,9 +494,11 @@ cat(paste0("Check-in you new advice draft here: ",
 }
 
 
-stock.code <- "had.27.1-2"
+stock.code <- c("pol.27.89a",
+                "nep.fu.30", "whg.27.89a")
 
 stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGBIE"]
+stock.code <- fileList$StockCode[fileList$StockCode %in% stock.code]
 stock.code <- stock.code[!stock.code == "nep.fu.13"]
 
 lapply(stock.code, function(x) createDraft(x, file_path = paste0("~/Advice/test_sheets/TEST_", x, ".docx")))
