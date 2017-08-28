@@ -22,15 +22,13 @@ if(!dir.exists(paste0(sharePoint, "Advice/Advice2017/"))) {
 ########################
 # Load Table functions #
 ########################
-source("~/git/ices-dk/AdviceTemplate/table_functions.R")
-
+source("table_functions.R")
 
 #############################################
 # Organizing stock list and section numbers #
 #############################################
 # rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3?$filter=ActiveYear%20eq%202017")$value
 rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value
-
 
 sl_ecoregion <- rawsd %>%
   filter(ActiveYear == 2017,
@@ -215,7 +213,7 @@ head_italic_text_prop <- chprop(base_text_prop,
 
 head_italic_par_prop <- chprop(base_par_prop,
                                text.align = "justify")
-stock.code = stock.code[1]
+# stock.code = stock.code[1]
 createDraft <- function(stock.code, file_path = NULL) {
 
   pub.date <- fileList$PubDate[fileList$StockCode %in% stock.code]
@@ -497,9 +495,9 @@ cat(paste0("Check-in you new advice draft here: ",
 stock.code <- c("pol.27.89a",
                 "nep.fu.30", "whg.27.89a")
 
-stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGBIE"]
-stock.code <- fileList$StockCode[fileList$StockCode %in% stock.code]
-stock.code <- stock.code[!stock.code == "nep.fu.13"]
+stock.code <- fileList$StockCode[fileList$ExpertGroup == "WGWIDE"]
+# stock.code <- fileList$StockCode[fileList$StockCode %in% stock.code]
+# stock.code <- stock.code[!stock.code == "nep.fu.13"]
 
 lapply(stock.code, function(x) createDraft(x, file_path = paste0("~/Advice/test_sheets/TEST_", x, ".docx")))
 lapply(stock.code, function(x) createDraft(x, file_path = NULL))

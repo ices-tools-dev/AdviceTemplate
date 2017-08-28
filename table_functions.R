@@ -300,6 +300,13 @@ assessment_basis_table <- function(stock.code, data.category, expert.name, exper
     assessmentBasisData <- assessmentBasisData[[1]]
   }
   
+  if(nrow(assessmentBasisData) == 6 &
+     stock.code == "boc.27.6-8"){
+    assessmentBasisData <- rbind(assessmentBasisData, assessmentBasisData[6,])
+    assessmentBasisData[6,] <- c("Other information", NA)
+    
+  }
+  
   colnames(assessmentBasisData) <- c("DESCRIPTION", "VALUE")
   assessmentBasisData$VALUE[1] <- paste0(data.category,
                                          " (ICES, UPDATE REFERENCE).")
