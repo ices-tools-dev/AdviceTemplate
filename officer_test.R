@@ -24,18 +24,18 @@ rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>%
          YearOfNextAssessment == 2018)
 
 
-#bianual advice to be done in 2018
+#bianual advice to be done in 2018, advice sheets need to be updated from scratch
 
-#rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>% 
- # filter(ActiveYear < 2017,
-#         YearOfNextAssessment == 2018)
+rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>% 
+  filter(ActiveYear < 2017,
+         YearOfNextAssessment == 2018)
 
 #anual advice to be done in 2018, advice sheets should be easier to fit?
 
-#rawsd <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>% 
-#  filter(ActiveYear == 2017,
-#         YearOfNextAssessment == 2018,
-#         YearOfLastAssessment == 2017)
+slan <- fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>% 
+  filter(ActiveYear == 2017,
+         YearOfNextAssessment == 2018,
+        YearOfLastAssessment == 2017)
 
 # Load Table functions #
 
