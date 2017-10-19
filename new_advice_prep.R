@@ -104,8 +104,10 @@ doc <- officer::read_docx(fileName)
 
 tabs <- docxtractr::read_docx(fileName)
 
-content <- docx_summary(doc)
-
+# content <- docx_summary(doc)
+columnNames <- lapply(seq(1: docxtractr::docx_tbl_count(tabs)),
+                      function(x) colnames(docxtractr::docx_extract_tbl(tabs,
+                                                                        tbl_number = x, header = TRUE)))
 ## 
 ##  
 ##
@@ -128,15 +130,150 @@ tab_heads <- content %>%
                                 TRUE ~ NA_character_),
          ### if a table_name is.na match table_name to table_number ###
          table_name = ave(table_name, table_number, FUN = function(x) unique(x[!is.na(x)]))
-  ) 
+  ) %>% 
+  select(table_number, table_name, is_header, row_id, cell_id, text)
 
-## Name the tables based on the advice sheet 
-columnNames <- lapply(seq(1:docxtractr::docx_tbl_count(tabs)),
-                      function(x) colnames(docxtractr::docx_extract_tbl(tabs, tbl_number = x, header = TRUE)))
-names(columnNames) <- tab_heads$table_name
 
+tab_names <- tab_heads %>% 
+  select(table_name, table_number) %>% 
+  filter(!table_name %in% c("stocksummary"))
+
+table_cells <- content %>%
+  filter(content_type %in% "table cell") %>%
+  group_by(doc_index) %>%
+  # {mutate(ungroup(.), table_number = 1 + group_indices(.))} %>%
+  mutate(is_header = case_when(row_id == 1 ~ TRUE,
+                               row_id != 1 ~ FALSE),
+         # table_number = paste0("Table", table_number),
+         table_name = case_when(is_header == TRUE & grepl("^variable$", tolower(text)) ~ "catchoptionsbasis",
+                                is_header == TRUE & grepl("^basis$", tolower(text)) ~ "catchoptions",
+                                is_header == TRUE & grepl("^advice basis$", tolower(text)) ~ "advicebasis",
+                                is_header == TRUE & grepl("^description$", tolower(text)) ~ "msyranges",
+                                is_header == TRUE & grepl("^framework$", tolower(text)) ~ "referencepoints",
+                                is_header == TRUE & grepl("^ices stock data category$", tolower(text)) ~ "assessmentbasis",
+                                is_header == TRUE & grepl("^ices advice$", tolower(text)) ~ "advice",
+                                is_header == TRUE & grepl("^catch \\(\\d{4}\\)$", tolower(text)) ~ "catchdistribution",
+                                TRUE ~ NA_character_),
+         table_name = case_when(is_header == TRUE &  ave(is.na(table_name), doc_index, FUN = all) ~ "REMOVE",
+                                TRUE ~ table_name),
+         table_name = ave(table_name, doc_index, FUN = function(x) unique(x[!is.na(x)]))) %>%
+  full_join(tab_names, by = "table_name") %>% 
+  ungroup() %>% 
+  filter(table_name != "REMOVE") %>%
+  select(table_number, table_name, is_header, row_id, cell_id, text)
+
+
+table <- "catchoptionsbasis"
+advice_flextable <- function(table_name) {
+  
+  
+  if(table == "Table2" &
+     all(grepl("variable|value|source|notes", tolower(table_header$text)))) {
+    table_body[, 2:ncol(table_body)] <- ""
+    table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
+  }
+  
+  if(table == "Table3" &
+     "basis" %in% tolower(table_header$text)) {
+    table_body[, c(2, 4)] <- ""
+    table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
+  }
+  
+  table_header <- table_header %>% 
+    spread(cell_id, text) %>% 
+    select(-table_number,
+           -is_header,
+           -row_id) %>% 
+    unlist(., use.names = FALSE)
+  
+  typology <- data.frame(col_keys = colnames(table_body),
+                         table_header)
+  
+  flextable(table_body) %>%
+    set_header_df(mapping = typology , key = "col_keys")
+}
+
+
+advice_flextable(table = "Table2")
+
+
+table <- "catchoptions"
 ## Write a function to find table and perform necessary actions based on instructions for table_name ##
-table_fix <- function(x, table_name, messages = TRUE) {
+table_fix <- function(x, table, update_header = c(TRUE, FALSE)[2], 
+                      update_rows = NULL, erase_rows = NULL, 
+                      add_row = c(TRUE, FALSE)[2], messages = TRUE) {
+
+  if(!table %in% unique(table_cells$table_name)) {
+    stop(paste0("table_name = ", table, " is not a table cell in the table_cells tibble"))
+  }
+  
+  tc <- table_cells %>%
+    filter(table_name == table)
+  
+  table_body <- tc %>% 
+    filter(!is_header) %>% 
+    spread(cell_id, text) %>% 
+    select(-table_number,
+           -table_name,
+           -is_header,
+           -row_id)
+  
+  if(!is.null(update_rows)){
+    update_rows_id <- tc$cell_id[tc$text %in% update_rows]
+    
+    for(i in update_rows_id) {
+      j = unlist(table_body[,i])
+      
+      # If all values are numeric, add a year
+      if(all(grepl("\\(\\d{4}\\)", j) == TRUE)) {
+        table_body[,i] <- paste0(gsub("\\(\\d{4}\\)", "", j), 
+                                 paste0("(", as.numeric(gsub(".*\\((.*)\\).*", "\\1", j)) + 1,
+                                        ")"))
+      }
+      ## If there are characters in the parentheses, just put "(UPDATE)"
+      if(all(grepl("\\(\\d{4}\\)", j) == FALSE)) {
+        table_body[,i] <- paste0(gsub("\\(.*\\)", "", j), "(UPDATE)")        
+      }
+    }
+  }
+  
+  if(!is.null(erase_rows)){
+    erase_rows_id <- tc$cell_id[tc$text %in% erase_rows]
+    table_body[,erase_rows_id] <- ""
+  }
+  
+  if(add_row){
+    table_body
+  }
+  
+  table_header <- tc %>% 
+    filter(is_header) %>% 
+    spread(cell_id, text) %>% 
+    select(-table_number,
+           -table_name,
+           -is_header,
+           -row_id) %>% 
+    unlist(., use.names = FALSE)
+
+  if(update_header){
+    
+    # If all values are numeric, add a year
+    table_header[grepl("\\(\\d{4}\\)", table_header)] <-sprintf("%s (%s)", gsub("\\(\\d{4}\\)", "",
+                                                                                table_header[grepl("\\(\\d{4}\\)", 
+                                                                                                   table_header)]), 
+                                                                as.numeric(gsub(".*\\((.*)\\).*", "\\1", 
+                                                                                table_header[grepl("\\(\\d{4}\\)",
+                                                                                                   table_header)])) + 1)
+    }
+    
+  typology <- data.frame(col_keys = colnames(table_body),
+                         table_header)
+  
+  flextable(table_body) %>%
+    set_header_df(mapping = typology , key = "col_keys")
+  
+}
+
 
   # stocksummary 
   if(table_name == "stocksummary"){
@@ -168,24 +305,12 @@ table_fix <- function(x, table_name, messages = TRUE) {
 }
 
 
-tt <-  doc %>% 
-  cursor_reach(keyword = tab_heads$text[2])
 
 
-# content <- docx_summary(doc)
-# 
-# table_cells <- content %>% 
-#   filter(content_type %in% "table cell") %>% 
-#   group_by(doc_index) %>% 
-#   {mutate(ungroup(.), table_number = 1 + group_indices(.))} %>% 
-#   mutate(is_header = case_when(row_id == 1 ~ TRUE,
-#                                row_id != 1 ~ FALSE),
-#          table_number = paste0("Table", table_number)) %>%  # come up with a preciese way of describing tables
-#   select(table_number, is_header, row_id, cell_id, text)
-
+unique(table_cells$table_number)
 
 doc %>% 
-  cursor_reach(keyword = sprintf("%s. The basis for the catch options.", stock_sd$CaptionName)) %>% 
+  cursor_reach(keyword = sprintf("%s. The basis for the catch options.", "Cod in Subarea 4, Division 7.d, and Subdivision 20")) %>% 
   cursor_forward %>% 
   body_remove %>% 
   body_add_flextable(advice_flextable("Table2")) %>% 
@@ -231,54 +356,6 @@ print(doc, target = "cursor.docx")
   # slip_in_text("Bananna", pos = "after", style = "Default Paragraph Font") 
 table = "Table3"
 
-advice_flextable <- function(table) {
-
-  if(!table %in% unique(table_cells$table_number)) {
-    stop(paste0("table_number = ", table, " is not a table cell in the table_cells tibble"))
-  }
-
-  tc <- table_cells %>%
-    ungroup(table_number) %>%
-    filter(table_number == table) 
-  
-  table_body <- tc %>% 
-    filter(!is_header) %>% 
-    spread(cell_id, text) %>% 
-    select(-table_number,
-           -is_header,
-           -row_id)
-  
-  table_header <- tc %>% 
-    filter(is_header) 
-  
-  if(table == "Table2" &
-     all(grepl("variable|value|source|notes", tolower(table_header$text)))) {
-    table_body[, 2:ncol(table_body)] <- ""
-    table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
-  }
-  
-  if(table == "Table3" &
-     "basis" %in% tolower(table_header$text)) {
-    table_body[, c(2, 4)] <- ""
-    table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
-  }
-   
-  table_header <- table_header %>% 
-    spread(cell_id, text) %>% 
-    select(-table_number,
-           -is_header,
-           -row_id) %>% 
-    unlist(., use.names = FALSE)
-  
-  typology <- data.frame(col_keys = colnames(table_body),
-                         table_header)
-  
-  flextable(table_body) %>%
-    set_header_df(mapping = typology , key = "col_keys")
-}
-
-
-advice_flextable(table = "Table2")
 
 docx_bookmarks(doc)
 
@@ -287,6 +364,6 @@ content <- docx_summary(doc)
 doc <- docxtractr::read_docx(advice_sheet)
 docxtractr::docx_tbl_count(doc)
 
-tbl1 <- flextable(data.frame(docx_extract_tbl(doc, tbl_number = 1,header = TRUE, trim = TRUE)))
+flextable(data.frame(docxtractr::docx_extract_tbl(tabs, tbl_number = 5,header = TRUE, trim = TRUE)))
 
 
