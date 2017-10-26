@@ -91,7 +91,7 @@ fileList <- bind_rows(
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 ## Identify the tables to keep and clean ##
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
-stock_name <- "cod.27.47d20"
+stock_name <- "pok.27.3a46"
 
 # start function here #
 stock_sd <- fileList %>% 
@@ -104,7 +104,7 @@ doc <- officer::read_docx(fileName)
 
 tabs <- docxtractr::read_docx(fileName)
 
-# content <- docx_summary(doc)
+content <- docx_summary(doc)
 columnNames <- lapply(seq(1: docxtractr::docx_tbl_count(tabs)),
                       function(x) colnames(docxtractr::docx_extract_tbl(tabs,
                                                                         tbl_number = x, header = TRUE)))
@@ -121,22 +121,23 @@ tab_heads <- content %>%
                                 grepl("Annual catch options", text) ~ "catchoptions",
                                 grepl("The basis of the advice", text) ~ "advicebasis",
                                 grepl("Reference points, values, and their technical basis", text) ~ "referencepoints",
-                                grepl("Basis of assessment and advice", text) ~ "assessmentbasis",
+                                grepl("Basis of assessment and advice|Basis of the assessment and advice", text) ~ "assessmentbasis",
                                 grepl("ICES advice and official landings", text) ~ "advice",
                                 grepl("Catch distribution by fleet", text) ~ "catchdistribution",
-                                grepl("History of commercial catch", text) ~ "catchhistory",
+                                grepl("History of commercial", text) ~ "catchhistory",
                                 grepl("Assessment summary", text) ~ "assessmentsummary",
                                 ### Add additional for Nephrops cat 3+ and other special cases ###
                                 TRUE ~ NA_character_),
          ### if a table_name is.na match table_name to table_number ###
          table_name = ave(table_name, table_number, FUN = function(x) unique(x[!is.na(x)]))
   ) %>% 
-  select(table_number, table_name, is_header, row_id, cell_id, text)
+  select(doc_index, table_number, table_name, is_header, row_id, cell_id, text)
 
 
 tab_names <- tab_heads %>% 
   select(table_name, table_number) %>% 
-  filter(!table_name %in% c("stocksummary"))
+  filter(!table_name %in% c("stocksummary")) %>% 
+  distinct(.keep_all = TRUE)
 
 table_cells <- content %>%
   filter(content_type %in% "table cell") %>%
@@ -144,7 +145,7 @@ table_cells <- content %>%
   # {mutate(ungroup(.), table_number = 1 + group_indices(.))} %>%
   mutate(is_header = case_when(row_id == 1 ~ TRUE,
                                row_id != 1 ~ FALSE),
-         # table_number = paste0("Table", table_number),
+         # table_number = paste0("Table ", table_number),
          table_name = case_when(is_header == TRUE & grepl("^variable$", tolower(text)) ~ "catchoptionsbasis",
                                 is_header == TRUE & grepl("^basis$", tolower(text)) ~ "catchoptions",
                                 is_header == TRUE & grepl("^advice basis$", tolower(text)) ~ "advicebasis",
@@ -157,213 +158,312 @@ table_cells <- content %>%
          table_name = case_when(is_header == TRUE &  ave(is.na(table_name), doc_index, FUN = all) ~ "REMOVE",
                                 TRUE ~ table_name),
          table_name = ave(table_name, doc_index, FUN = function(x) unique(x[!is.na(x)]))) %>%
-  full_join(tab_names, by = "table_name") %>% 
-  ungroup() %>% 
+  left_join(tab_names, by = c("table_name")) %>% 
+  ungroup() %>%
   filter(table_name != "REMOVE") %>%
-  select(table_number, table_name, is_header, row_id, cell_id, text)
+  select(doc_index, table_name, is_header, row_id, cell_id, text)
+
+# 
+# td <- tab_heads %>% 
+#   select(table_name, table_number, caption_text = text) %>% 
+#   filter(!table_name %in% c("stocksummary", "catchhistory", "assessmentsummary"))
+# 
+# tt <- table_cells %>% 
+#   filter(is_header,
+#          !table_name %in% c("stocksummary", "catchhistory", "assessmentsummary")) %>% 
+#   select(doc_index, table_name) %>% 
+#   distinct(.keep_all = TRUE) %>% 
+#   left_join(td)
+# 
+# tab_heads %>% 
+#   select(table_number, table_name, caption_text = text) %>% 
+#   left_join(tt)
+# 
+# tt <- table_cells %>%
+#   select(table_name, table_number, diddy = text, doc_index) %>% 
+#   left_join(tab_heads)
+
+# table <- "catchoptionsbasis"
+# advice_flextable <- function(table_name) {
+#   
+#   
+#   if(table == "Table2" &
+#      all(grepl("variable|value|source|notes", tolower(table_header$text)))) {
+#     table_body[, 2:ncol(table_body)] <- ""
+#     table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
+#   }
+#   
+#   if(table == "Table3" &
+#      "basis" %in% tolower(table_header$text)) {
+#     table_body[, c(2, 4)] <- ""
+#     table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
+#   }
+#   
+#   table_header <- table_header %>% 
+#     spread(cell_id, text) %>% 
+#     select(-table_number,
+#            -is_header,
+#            -row_id) %>% 
+#     unlist(., use.names = FALSE)
+#   
+#   typology <- data.frame(col_keys = colnames(table_body),
+#                          table_header)
+#   
+#   flextable(table_body) %>%
+#     set_header_df(mapping = typology , key = "col_keys")
+# }
 
 
-table <- "catchoptionsbasis"
-advice_flextable <- function(table_name) {
-  
-  
-  if(table == "Table2" &
-     all(grepl("variable|value|source|notes", tolower(table_header$text)))) {
-    table_body[, 2:ncol(table_body)] <- ""
-    table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
-  }
-  
-  if(table == "Table3" &
-     "basis" %in% tolower(table_header$text)) {
-    table_body[, c(2, 4)] <- ""
-    table_body[, c(1, 3)] <- gsub("\\s*\\([^\\)]+\\)", " (UPDATE)", as.matrix(table_body[,c(1, 3)]))
-  }
-  
-  table_header <- table_header %>% 
-    spread(cell_id, text) %>% 
-    select(-table_number,
-           -is_header,
-           -row_id) %>% 
-    unlist(., use.names = FALSE)
-  
-  typology <- data.frame(col_keys = colnames(table_body),
-                         table_header)
-  
-  flextable(table_body) %>%
-    set_header_df(mapping = typology , key = "col_keys")
-}
+# advice_flextable(table = "Table2")
 
+x = doc
+table <- "advice"
+update_cols = NULL
+update_header = FALSE
+erase_cols = NULL
+add_year = TRUE
 
-advice_flextable(table = "Table2")
-
-
-table <- "catchoptions"
 ## Write a function to find table and perform necessary actions based on instructions for table_name ##
-table_fix <- function(x, table, update_header = c(TRUE, FALSE)[2], 
-                      update_rows = NULL, erase_rows = NULL, 
-                      add_row = c(TRUE, FALSE)[2], messages = TRUE) {
-
+table_fix <- function(x, table, 
+                      update_header = c(TRUE, FALSE)[2], update_cols = NULL,
+                      erase_cols = NULL, add_year = c(TRUE, FALSE)[2], 
+                      messages = TRUE) {
+  
   if(!table %in% unique(table_cells$table_name)) {
     stop(paste0("table_name = ", table, " is not a table cell in the table_cells tibble"))
   }
   
   tc <- table_cells %>%
     filter(table_name == table)
-  
-  table_body <- tc %>% 
-    filter(!is_header) %>% 
-    spread(cell_id, text) %>% 
-    select(-table_number,
-           -table_name,
-           -is_header,
-           -row_id)
-  
-  if(!is.null(update_rows)){
-    update_rows_id <- tc$cell_id[tc$text %in% update_rows]
+
+  for(tab_index in 1:length(unique(tc$doc_index))) {
     
-    for(i in update_rows_id) {
-      j = unlist(table_body[,i])
+    table_index <- unique(tc$doc_index)[tab_index]
+    
+    table_body <- tc %>% 
+      filter(!is_header,
+             doc_index == table_index) %>%
+      ungroup %>% 
+      select(-doc_index) %>%
+      spread(cell_id, text) %>% 
+      select(-table_name,
+             -is_header,
+             -row_id)
+    
+    table_header <- tc %>% 
+      filter(is_header,
+             doc_index == table_index) %>% 
+      ungroup %>% 
+      select(-doc_index) %>% 
+      spread(cell_id, text) %>% 
+      select(-table_name,
+             -is_header,
+             -row_id) %>% 
+      unlist(., use.names = FALSE)
+    
+    if(!is.null(update_cols)){
       
+      if(is.numeric(update_cols)) {
+        update_cols_id <- update_cols
+      }
+      
+      if(is.character(update_cols)) {
+        if("all" %in% update_cols) {
+          update_cols_id <- unique(tc$cell_id)
+        } else {
+          update_cols_id <- tc$cell_id[tc$text %in% update_cols]
+        }
+      }
+      
+      for(i in update_cols_id) {
+        j = unlist(table_body[,i])
+        
+        ## If all values in parentheses are numeric, add a year
+        if(all(grepl("\\(\\d{4}\\)", j) == TRUE)) {
+          new_vals <- sprintf("(%s)", as.numeric(gsub("\\(|\\)", 
+                                                      "",
+                                                      stringr::str_extract(j, "\\(\\d{4}\\)"))) + 1)
+          
+          table_body[,i] <- stringr::str_replace_all(j, "\\(\\d{4}\\)", new_vals)
+        }
+        
+        ## If there are references w/ characters in the parentheses, just put "(UPDATE)"
+        if(all(grepl("ICES \\(\\d{4}.*\\)", j) == TRUE)) {
+          table_body[,i] <- "ICES (UPDATE REF)"
+        }
+        
+        ## If there are any F years to update
+        if(any(grepl("F\\d{4}", j) == TRUE)) {
+          f_vals <- sprintf("F%s", as.numeric(gsub("F", 
+                                                   "",
+                                                   stringr::str_extract(j, "F\\d{4}"))) + 1)
+          table_body[,i] <- stringr::str_replace_all(j, "F\\d{4}", f_vals)
+        }
+        
+        ## 
+        if(any(grepl("\\d.* [T-t]onnes|\\d+\\.*\\d*%", j) == TRUE)){
+          
+          table_body[,i] <- stringr::str_replace_all(j, "\\d.* [T-t]onnes|\\d+\\.*\\d*%", "UPDATE VALUE")
+        }
+      }
+    }
+    
+    
+    if(!is.null(erase_cols)){
+      
+      if(is.numeric(erase_cols)) {
+        erase_cols_id <- erase_cols
+      } 
+      
+      if(is.character(erase_cols)) {
+        if("all" %in% erase_cols) {
+          erase_cols_id <- unique(tc$cell_id)[-1]
+        } else {
+          erase_cols_id <- tc$cell_id[tc$text %in% erase_cols]
+        }
+      }
+      table_body[ , erase_cols_id] <- ""
+    }
+    
+    
+    if(add_year){
+      if("year" %in% tolower(table_header)){
+        new_years <- stock_sd$YearOfNextAssessment + 1:stock_sd$AssessmentFrequency
+        empty_table <- table_body[1:length(new_years),]
+        empty_table[] <- ""
+        empty_table[, 1] <- as.character(new_years)
+        table_body <- bind_rows(table_body, empty_table)
+      } else {
+        stop("add_year only works on the 'advice' table. Check your table")    
+      }
+    }
+    
+    
+    if(update_header){
       # If all values are numeric, add a year
-      if(all(grepl("\\(\\d{4}\\)", j) == TRUE)) {
-        table_body[,i] <- paste0(gsub("\\(\\d{4}\\)", "", j), 
-                                 paste0("(", as.numeric(gsub(".*\\((.*)\\).*", "\\1", j)) + 1,
-                                        ")"))
-      }
-      ## If there are characters in the parentheses, just put "(UPDATE)"
-      if(all(grepl("\\(\\d{4}\\)", j) == FALSE)) {
-        table_body[,i] <- paste0(gsub("\\(.*\\)", "", j), "(UPDATE)")        
-      }
-    }
-  }
-  
-  if(!is.null(erase_rows)){
-    erase_rows_id <- tc$cell_id[tc$text %in% erase_rows]
-    table_body[,erase_rows_id] <- ""
-  }
-  
-  if(add_row){
-    table_body
-  }
-  
-  table_header <- tc %>% 
-    filter(is_header) %>% 
-    spread(cell_id, text) %>% 
-    select(-table_number,
-           -table_name,
-           -is_header,
-           -row_id) %>% 
-    unlist(., use.names = FALSE)
-
-  if(update_header){
-    
-    # If all values are numeric, add a year
-    table_header[grepl("\\(\\d{4}\\)", table_header)] <-sprintf("%s (%s)", gsub("\\(\\d{4}\\)", "",
-                                                                                table_header[grepl("\\(\\d{4}\\)", 
-                                                                                                   table_header)]), 
-                                                                as.numeric(gsub(".*\\((.*)\\).*", "\\1", 
-                                                                                table_header[grepl("\\(\\d{4}\\)",
-                                                                                                   table_header)])) + 1)
+      table_header[grepl("\\(\\d{4}\\)", table_header)] <- sprintf("%s (%s)", gsub("\\(\\d{4}\\)", "",
+                                                                                   table_header[grepl("\\(\\d{4}\\)", 
+                                                                                                      table_header)]), 
+                                                                   as.numeric(gsub(".*\\((.*)\\).*", "\\1", 
+                                                                                   table_header[grepl("\\(\\d{4}\\)",
+                                                                                                      table_header)])) + 1)
     }
     
-  typology <- data.frame(col_keys = colnames(table_body),
-                         table_header)
-  
-  flextable(table_body) %>%
-    set_header_df(mapping = typology , key = "col_keys")
+    typology <- data.frame(col_keys = colnames(table_body),
+                           table_header)
+    
+    ft <- flextable(table_body) %>%
+      set_header_df(mapping = typology , key = "col_keys")
+    
+    ## Figure out where to put the table ##
+    cc <- tab_heads %>% 
+      filter(table_name == table)
+    
+    caption_index <- unique(cc$doc_index)[tab_index]
+    
+    caption_keyword <- tab_heads %>% 
+      filter(table_name == table,
+             doc_index == caption_index) %>% 
+      pull(text)
+    
+    if(table %in% c("catchhistory", "assessmentsummary")) {
+      cursor_reach(x, keyword = caption_keyword) %>% 
+        cursor_forward %>% 
+        body_remove      
+    }
+    
+    if(!table %in% c("catchhistory", "assessmentsummary")){
+      cursor_reach(x, keyword = caption_keyword) %>%
+        cursor_forward %>% 
+        body_remove %>% 
+        body_add_flextable(ft)
+    }
+  }
+    
+  # update_header
+  # update_cols
+  # erase_cols
+  # add_year
   
 }
-
-
-  # stocksummary 
-  if(table_name == "stocksummary"){
-    if(messages) cat("Please updated Stock Summary Table at sg.ices.dk and upload directly")
-  }
-  
-  # catchoptionsbasis
-  if(table_name == "catchoptionsbasis"){
-    if(messages) cat("Basis of the catch options table.\n\terasing: 'Value' and 'Notes' columns\n\tupdating: 'Variable' and 'Source' columns")
-    
-  }
-  # catchoptions      
-  if(table_name == "catchoptions"){
-    if(messages) cat("Catch options table.\n\terasing: all columns\n\tupdating: 'Variable' and 'Source' columns")
-    
-  }
-  
-  # advicebasis       
-  # referencepoints   
-  # assessmentbasis  
-  # advice
-  # catchdistribution
-  # catchhistory
-  # assessmentsummary 
-  
-    cursor_reach(x, keyword = table_name) %>% 
-    cursor_forward %>% 
-    body_remove
-}
-
-
-
-
-unique(table_cells$table_number)
+# 
+# 
+# 
+#   # stocksummary 
+#   if(table_name == "stocksummary"){
+#     if(messages) cat("Please updated Stock Summary Table at sg.ices.dk and upload directly")
+#   }
+#   
+#   # catchoptionsbasis
+#   if(table_name == "catchoptionsbasis"){
+#     if(messages) cat("Basis of the catch options table.\n\terasing: 'Value' and 'Notes' columns\n\tupdating: 'Variable' and 'Source' columns")
+#     
+#   }
+#   # catchoptions      
+#   if(table_name == "catchoptions"){
+#     if(messages) cat("Catch options table.\n\terasing: all columns\n\tupdating: 'Variable' and 'Source' columns")
+#     
+#   }
 
 doc %>% 
-  cursor_reach(keyword = sprintf("%s. The basis for the catch options.", "Cod in Subarea 4, Division 7.d, and Subdivision 20")) %>% 
-  cursor_forward %>% 
-  body_remove %>% 
-  body_add_flextable(advice_flextable("Table2")) %>% 
-  cursor_reach(keyword = sprintf("%s. Annual catch options.", stock_sd$CaptionName)) %>% 
-  cursor_forward %>% 
-  body_remove %>% 
-  body_add_flextable(advice_flextable("Table3")) %>% 
-  cursor_reach(keyword = sprintf("%s. The basis of the advice.", stock_sd$CaptionName)) %>% 
-  cursor_forward %>% 
-  body_remove %>% 
-  body_add_flextable(advice_flextable("Table4")) %>% 
-  cursor_reach(keyword = sprintf("%s. Reference points, values, and their technical basis.", stock_sd$CaptionName)) %>% 
-  cursor_forward %>% 
-  body_remove %>% 
-  body_add_flextable(advice_flextable("Table5")) %>% 
-  cursor_reach(keyword = sprintf("%s. Basis of assessment and advice.", stock_sd$CaptionName)) %>% 
-  cursor_forward %>% 
-  body_remove %>% 
-  body_add_flextable(advice_flextable("Table6")) %>% 
-  # This table just needs an extra row added... sometimes there are multiples, so need to be clever
-  cursor_reach(keyword = sprintf("%s. ICES advice and official landings.", stock_sd$CaptionName)) %>% 
-  cursor_forward %>% 
-  body_remove %>% 
-  body_add_flextable(advice_flextable("Table7")) %>% 
-  cursor_reach(keyword = sprintf("%s. Catch distribution", stock_sd$CaptionName)) %>% 
-  body_add_par(value =  sprintf("%s. Catch distribution by fleet in 2017 as estimated by ICES.",
-                                stock_sd$CaptionName), pos = "on") %>% 
-  cursor_forward %>% 
-  body_remove %>% 
-  body_add_flextable(advice_flextable("Table8")) %>% 
-  cursor_reach(keyword = "Table ") %>%
-  cursor_forward %>% 
-  body_remove %>% 
-  cursor_reach(keyword = "Table ") %>%
-  cursor_forward %>% 
-  body_remove
+  table_fix(x = ., table = "catchoptionsbasis", 
+            update_header = FALSE, update_cols = c("Variable", "Source"), 
+            erase_cols = c("Value", "Notes"),
+            add_year = FALSE, 
+            messages = FALSE) %>% 
+  table_fix(table = "catchoptions", 
+            update_header = TRUE, update_cols = "Basis", 
+            erase_cols = "all",
+            add_year = FALSE, 
+            messages = FALSE) %>% 
+  table_fix(table = "advicebasis") %>% 
+  # table_fix(table = "msyranges") %>% 
+  table_fix(table = "referencepoints") %>% 
+  # table_fix(table = "assessmentbasis") %>% 
+  table_fix(table = "advice") %>% 
+  table_fix(table = "catchdistribution") %>% 
+  table_fix(table = "catchhistory") %>% 
+  table_fix(table = "assessmentsummary")
   
-
-    
-
 print(doc, target = "cursor.docx")
 
-  # slip_in_text("Bananna", pos = "after", style = "Default Paragraph Font") 
-table = "Table3"
-
-
-docx_bookmarks(doc)
-
-content <- docx_summary(doc)
-
-doc <- docxtractr::read_docx(advice_sheet)
-docxtractr::docx_tbl_count(doc)
-
-flextable(data.frame(docxtractr::docx_extract_tbl(tabs, tbl_number = 5,header = TRUE, trim = TRUE)))
-
-
+# 
+# 
+#   cursor_reach(keyword = sprintf("%s. The basis for the catch options.", "Cod in Subarea 4, Division 7.d, and Subdivision 20")) %>% 
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   body_add_flextable(advice_flextable("Table2")) %>% 
+#   cursor_reach(keyword = sprintf("%s. Annual catch options.", stock_sd$CaptionName)) %>% 
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   body_add_flextable(advice_flextable("Table3")) %>% 
+#   cursor_reach(keyword = sprintf("%s. The basis of the advice.", stock_sd$CaptionName)) %>% 
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   body_add_flextable(advice_flextable("Table4")) %>% 
+#   cursor_reach(keyword = sprintf("%s. Reference points, values, and their technical basis.", stock_sd$CaptionName)) %>% 
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   body_add_flextable(advice_flextable("Table5")) %>% 
+#   cursor_reach(keyword = sprintf("%s. Basis of assessment and advice.", stock_sd$CaptionName)) %>% 
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   body_add_flextable(advice_flextable("Table6")) %>% 
+#   # This table just needs an extra row added... sometimes there are multiples, so need to be clever
+#   cursor_reach(keyword = sprintf("%s. ICES advice and official landings.", stock_sd$CaptionName)) %>% 
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   body_add_flextable(advice_flextable("Table7")) %>% 
+#   cursor_reach(keyword = sprintf("%s. Catch distribution", stock_sd$CaptionName)) %>% 
+#   body_add_par(value =  sprintf("%s. Catch distribution by fleet in 2017 as estimated by ICES.",
+#                                 stock_sd$CaptionName), pos = "on") %>% 
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   body_add_flextable(advice_flextable("Table8")) %>% 
+#   cursor_reach(keyword = "Table ") %>%
+#   cursor_forward %>% 
+#   body_remove %>% 
+#   cursor_reach(keyword = "Table ") %>%
+#   cursor_forward %>% 
+#   body_remove
+#   
