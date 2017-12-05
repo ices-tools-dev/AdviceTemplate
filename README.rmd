@@ -5,8 +5,8 @@ A simple R package to draft ICES advice sheets
 ICES provides advice on over 260 fish stocks. In 2017, ICES will provide new advice for 170 of these stocks. Providing uniform and quality controled products is paramount to ICES's mission, however, the number of fish stocks (many with slight variations in data and format) and the practical consideration of having a large network of persons responsible throughout the process can make a consistent product difficult. The impetus, here, is to provide a starting point that reduces Secretariat work load, provides a consistent product, requires no additional software (everything remains a word .docx file!), is mostly hidden from view outside the Secretariat, and is flexible enough for the challenges mentioned above.
 
 Notes:
-1. With the implementation of more standardized model output with the ICES Transparent Assessment Framework, some of the limitations mentioned below will be mitigated. 
-2. Saving text from year-1 saves considerable time, however, awkward vestiges are sometimes transfered from year to year. The approach outlined below **cannot** preserve text from year-1. 
+With the implementation of more standardized model output with the ICES Transparent Assessment Framework, some of the limitations mentioned below will be mitigated. 
+
 
 ### Stages
 1. The [ReporteRs](https://cran.r-project.org/web/packages/ReporteRs/index.html) package can add relevant information from the SD (via the [icesSD](https://github.com/ices-tools-prod/icesSD) package) to a generic advice sheet template to create a draft advice sheet for each stock. Each draft advice sheet will have updated stock names, section numbers, advice heading, and caption labels saved to a output folder with a specific file name (e.g., O:/<book_number>/<STOCK.CODE>.docx).
@@ -15,18 +15,13 @@ Notes:
 
 2. Building on the above, the [docxtractr](https://cran.r-project.org/web/packages/docxtractr/index.html) package can harvest tables from year-1 advice sheets and the ReporteRs package can format and add standard tables to the proper location in the draft advice sheets. Splitting the stocks into data categories (Category 1-6) and stock type (e.g., crustacean, elasmobranch, or fish) will be necessary to format and add the different standard tables for each unique type.
 
-3. The table "History of Catch and Landings" can be added directly from the ICES Historical Catch database and Rec-12.  
-  * Advantages: Complete provenance from data to advice. 
-  * Limitations: Sometimes this table is really complex. Worse, the values presented in advice are completely different from what is found in ICES databases. Is this table really necessary?
-  * Completion: 15% (~ 4 days to complete for most stocks)
+3. *update* Now for 2018, the [officer](https://cran.r-project.org/web/packages/officer/index.html) package provides much of the text support that was missing from last year. Now, the effort will be to take year-1 advice, clean out the tables and update as a new draft for 2018.
+
 
 4. Currently, we create draft advice sheets before the Working Group. If we create draft advice sheets after the final assessment is accepted and uploaded to Stock Assessment Graphs, the icesSAG package can be used to add figures and tables directly into the draft advice sheet.
   * Advantages: Nearly a complete draft advice sheet with full provenance to ICES databases (SLD, SAG, and potentially Historical Catch and Rec-12 databases).
   * Limitations: We would be changing how we work.
   * Completion: 0% (~ 2 days, plus additional time to train supporting staff to generate advice sheets)
-
-## Conclusions
-With ~ 1 week of dedicated coding we can probably get to Stage 2.
 
 
 Tables that should not be transferred from year-1:
