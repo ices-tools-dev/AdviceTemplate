@@ -2,73 +2,76 @@
 # Install and load packages #
 #############################
 
-# library(docxtractr)
 library(flextable)
 library(officer)
-# library(jsonlite)
 library(dplyr)
 library(tidyr)
 
-# Note: You must log in to SharePoint and have this drive mapped
-sharePoint <- "//community.ices.dk/DavWWWRoot/"
-if(!dir.exists(paste0(sharePoint, "Advice/Advice2017/"))) {
-  stop("Note: You must be on the ICES network and log in to SharePoint and have this drive mapped")
-}
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
-## Download and prepare the stock information data ##
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
-
-rawsd <- jsonlite::fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>% 
-  filter(ActiveYear == 2017,
-         YearOfNextAssessment == 2018) %>% 
-  mutate(CaptionName = gsub("\\s*\\([^\\)]+\\)", "", as.character(StockKeyDescription)),
-         AdviceReleaseDate = as.Date(AdviceReleaseDate, format = "%d/%m/%y"),
-         PubDate = format(AdviceReleaseDate, "%e %B %Y"),
-         ExpertURL = paste0("http://www.ices.dk/community/groups/Pages/", ExpertGroup, ".aspx"),
-         DataCategory = gsub("\\..*$", "", DataCategory))
-
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
-## Find most recent released advice on SharePoint ##
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
-
-advice_file_finder <- function(year){
+get_filelist <- function(year = 2017) {
   
-  advice <- list.files(sprintf("%sAdvice/Advice%s/", sharePoint, year))
+  # Note: You must log in to SharePoint and have this drive mapped
+  sharePoint <- "//community.ices.dk/DavWWWRoot/"
   
-  if(year == 2015){
-    folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
-                    "CelticSea", "FaroePlateau", "Iceland",
-                    "NASalmon","NorthSea", "Widely")
-  }
-  if(year == 2016){
-    folderNames = c("BalticSea", "BarentsSea", "Biscay", 
-                    "CelticSea", "Faroes", "Iceland",
-                    "NorthSea", "Salmon", "Widely")
+  if(!dir.exists(sprintf("%sAdvice/Advice%s/", sharePoint, year))) {
+    stop("Note: You must be on the ICES network and have sharepoint mapped to a local drive.")
   }
   
-  if(year == 2017){
-    folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
-                    "CelticSea", "Faroes", "Iceland",
-                    "NorthSea", "Salmon", "Widely")
+  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
+  ## Download and prepare the stock information data ##
+  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
+  
+  rawsd <- jsonlite::fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>% 
+    filter(ActiveYear == year,
+           YearOfNextAssessment == year + 1) %>% ## This should be fixed when ActiveYear is updated in SID 
+    mutate(CaptionName = gsub("\\s*\\([^\\)]+\\)", "", as.character(StockKeyDescription)),
+           AdviceReleaseDate = as.Date(AdviceReleaseDate, format = "%d/%m/%y"),
+           PubDate = format(AdviceReleaseDate, "%e %B %Y"),
+           ExpertURL = paste0("http://www.ices.dk/community/groups/Pages/", ExpertGroup, ".aspx"),
+           DataCategory = gsub("\\..*$", "", DataCategory))
+  
+  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
+  ## Find most recent released advice on SharePoint ##
+  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
+  
+  advice_file_finder <- function(year){
+    
+    advice <- list.files(sprintf("%sAdvice/Advice%s/", sharePoint, year))
+    
+    if(year == 2015){
+      folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
+                      "CelticSea", "FaroePlateau", "Iceland",
+                      "NASalmon","NorthSea", "Widely")
+    }
+    if(year == 2016){
+      folderNames = c("BalticSea", "BarentsSea", "Biscay", 
+                      "CelticSea", "Faroes", "Iceland",
+                      "NorthSea", "Salmon", "Widely")
+    }
+    if(year == 2017){
+      folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
+                      "CelticSea", "Faroes", "Iceland",
+                      "NorthSea", "Salmon", "Widely")
+    }
+    
+    ### Hopefully, future folderNames are consistent, if not, map by hand, as above.
+    adviceList <- lapply(advice[advice %in% folderNames],
+                         function(x) list.files(sprintf("%sAdvice/Advice%s/%s/Released_Advice", sharePoint, year, x)))
+    
+    names(adviceList) <- folderNames
+    fileList <- do.call("rbind", lapply(adviceList,
+                                        data.frame, 
+                                        stringsAsFactors = FALSE))
+    colnames(fileList) <- "StockCode"
+    fileList$filepath <- sprintf("%sAdvice/Advice%s/%s/Released_Advice/%s", 
+                                 sharePoint,
+                                 year,
+                                 gsub("\\..*", "", row.names(fileList)),
+                                 fileList$StockCode)
+    fileList$StockCode <- tolower(gsub("\\.docx*", "", fileList$StockCode))
+    
+    return(fileList)
   }
-  
-  adviceList <- lapply(advice[advice %in% folderNames],
-                       function(x) list.files(sprintf("%sAdvice/Advice%s/%s/Released_Advice", sharePoint, year, x)))
-  
-  names(adviceList) <- folderNames
-  fileList <- do.call("rbind", lapply(adviceList,
-                                      data.frame, 
-                                      stringsAsFactors = FALSE))
-  colnames(fileList) <- "StockCode"
-  fileList$filepath <- sprintf("%sAdvice/Advice%s/%s/Released_Advice/%s", 
-                               sharePoint,
-                               year,
-                               gsub("\\..*", "", row.names(fileList)),
-                               fileList$StockCode)
-  fileList$StockCode <- tolower(gsub("\\.docx*", "", fileList$StockCode))
-  return(fileList)
-}
 
 fileList <- bind_rows(
   rawsd %>%
@@ -80,10 +83,21 @@ fileList <- bind_rows(
   rawsd %>%
     filter(YearOfLastAssessment == 2017) %>% 
     left_join(advice_file_finder(2017), by = c("StockKeyLabel" = "StockCode"))
+  ## Repeat for additional years
   ) %>% 
   mutate(URL = ifelse(is.na(filepath),
                       NA,
-                      paste0(gsub("//community.ices.dk/DavWWWRoot/", "https://community.ices.dk/", filepath), "?Web=1")))
+                      paste0(gsub("//community.ices.dk/DavWWWRoot/", 
+                                  "https://community.ices.dk/", 
+                                  filepath), 
+                             "?Web=1")))
+
+return(fileList)
+} # Close get_filelist
+
+fileList <- get_filelist(2017)
+
+format_advice <- function(stock_name) {
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 ## Identify the tables to keep and clean ##
@@ -101,26 +115,19 @@ fileName <- stock_sd %>%
 ## Grab the last advice
 doc <- officer::read_docx(fileName)
 
-## Pull out a data.frames of text (content[]) and tables (both tabs[] and content[])
+## Pull out a data.frame of text (content[]) and tables (both tabs[] and content[])
 tabs <- docxtractr::read_docx(fileName)
-
 content <- officer::docx_summary(doc)
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 ## Define tables according to to header and caption ##  
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 
-## For each table, grab the column names (or headers)
-# columnNames <- lapply(seq(1: docxtractr::docx_tbl_count(tabs)),
-                      # function(x) colnames(docxtractr::docx_extract_tbl(tabs,
-                                                                        # tbl_number = x, header = TRUE)))
-
  ## Get all tables by searching for table cells and get the header row
 table_header_name <- content %>% 
   filter(content_type %in% "table cell",
          row_id == 1) %>%
-  select(-dplyr::one_of("content_type", 
-                 "style_name", "level", 
+  select(-dplyr::one_of("content_type", "style_name", "level", 
                  "num_id", "row_id", "is_header", "col_span", "row_span")) %>% 
   spread(cell_id, text) %>% 
   mutate(header_name = case_when(grepl("^[V-v]ariable", `1`) &
@@ -137,16 +144,17 @@ table_header_name <- content %>%
                                   grepl("^[W-w]anted\\s[C-c]atch", `2`) ~ "catchdistribution",
                                 grepl("^[Y-year]", `1`) ~ "assessmentsummary",
                                 TRUE ~ "other"),
-         # table_index = doc_index,
          caption_index = doc_index - 1) %>% 
-  select(doc_index, #table_index,
+  select(doc_index,
          caption_index,
          header_name)
 
-## Find Table 1
+## Stock summary table is inserted as an image, so it won't be found searching for table cells,
+## so it is added using the caption label
+
 table_1 <- content %>% 
   filter(content_type %in% "paragraph",
-         grepl("State of the stock and fishery", text)) %>% 
+         grepl("state of the stock and fishery", tolower(text))) %>% 
   mutate(header_name = "stocksummary",
          caption_index = doc_index,
          doc_index = caption_index + 1) %>% 
@@ -159,120 +167,17 @@ table_header_name <-
             table_1) %>% 
   arrange(doc_index)
 
+## Add caption text to the data.frame based on the doc_index
 table_header_name$text <- content$text[content$doc_index %in% table_header_name$caption_index]
 
-# ## Captions searched using the doc_index - 1 from the table_header_name (e.g., Table 1. State of the stock and fishery...)
-# table_caption_name <- content %>% 
-#   filter(doc_index %in% table_header_name$caption_index) %>% 
-#   mutate(caption_name = case_when(grepl("State of the stock and fishery relative to reference points", text) ~ "stocksummary",
-#                          grepl("The basis for the catch options", text) ~ "catchoptionsbasis",
-#                          grepl("Annual catch options", text) ~ "catchoptions",
-#                          grepl("The basis of the advice", text) ~ "advicebasis",
-#                          grepl("Reference points, values, and their technical basis", text) ~ "referencepoints",
-#                          grepl("Basis of assessment and advice|Basis of the assessment and advice", text) ~ "assessmentbasis",
-#                          grepl("ICES advice and official landings", text) ~ "advice",
-#                          grepl("Catch distribution by fleet", text) ~ "catchdistribution",
-#                          grepl("History of commercial", text) ~ "catchhistory",
-#                          grepl("Assessment summary", text) ~ "assessmentsummary",
-#                          ### Add additional for Nephrops cat 3+ and other special cases ###
-#                          TRUE ~ NA_character_)) %>% 
-#   left_join(table_header_name, by = c("doc_index" = "caption_index")) %>% 
-#   mutate(table_name = case_when(header_name == caption_name ~ header_name,
-#                                 is.na(header_name) &
-#                                   !is.na(caption_name) ~ caption_name,
-#                                 !is.na(header_name) &
-#                                  is.na(caption_name) ~ header_name,
-#                                 header_name == "Other" &
-#                                   !is.na(caption_name) ~ caption_name,
-#                                 TRUE ~ NA_character_),
-#          caption_number = stringr::str_extract(text, "Table\\s[0-9]+")) %>% 
-#   select(-dplyr::one_of("content_type", "caption_name", "header_name",
-#                         "style_name", "level", "cell_id", "text",
-#                         "num_id", "row_id", "is_header", "col_span", "row_span"))
-
-## Captions searched using the grepl(table 1, text) (e.g., Table 1. State of the stock and fishery...)
-# table_para_name <- content %>% 
-#   filter(content_type %in% "paragraph",
-#          grepl(paste0("Table\\s[0-9]+", stock_sd$SpeciesCommonName), text)) %>% 
-#   mutate(table_number = stringr::str_extract(text, "Table\\s[0-9]+"),
-#     # table_number = gsub("(^Table\\s[0-9]+).*$", "\\1", text)),
-#          caption_name = case_when(grepl("State of the stock and fishery relative to reference points", text) ~ "stocksummary",
-#                                 grepl("The basis for the catch options", text) ~ "catchoptionsbasis",
-#                                 grepl("Annual catch options", text) ~ "catchoptions",
-#                                 grepl("The basis of the advice", text) ~ "advicebasis",
-#                                 grepl("Reference points, values, and their technical basis", text) ~ "referencepoints",
-#                                 grepl("Basis of assessment and advice|Basis of the assessment and advice", text) ~ "assessmentbasis",
-#                                 grepl("ICES advice and official landings", text) ~ "advice",
-#                                 grepl("Catch distribution by fleet", text) ~ "catchdistribution",
-#                                 grepl("History of commercial", text) ~ "catchhistory",
-#                                 grepl("Assessment summary", text) ~ "assessmentsummary",
-#                                 ### Add additional for Nephrops cat 3+ and other special cases ###
-#                                 TRUE ~ NA_character_)) %>% 
-#   select(-dplyr::one_of("content_type", 
-#                         "style_name", "level", "cell_id", #"text",
-#                         "num_id", "row_id", "is_header", "col_span", "row_span"))
-
-# tab_heads <- table_header_name %>% 
-#   full_join(table_para_name, by = c("caption_index" = "doc_index")) %>%
-#   mutate(table_name = case_when(header_name == caption_name ~ header_name,
-#                                 is.na(header_name) & !is.na(caption_name) ~ caption_name,
-#                                 is.na(caption_name) & header_name == "other" ~ "other",
-#                                 !is.na(caption_name) & header_name == "other" ~ caption_name,
-#                                 TRUE ~ header_name),
-#          table_number = case_when(table_name %in% c("other") ~ "table_x",
-#                                   table_name %in% c("ranges") ~ "table_ranges",
-#                                   TRUE ~ table_number),
-#          # table_number = ave(table_number, table_name, FUN = function(x) unique(x[!is.na(x)])),
-#          doc_index = table_index) %>% 
-#   group_by(table_name) %>% 
-#   tidyr::fill(table_number, text,.direction = "up") %>% 
-#   select(doc_index, table_number, table_name, text)
-# 
-# tab_heads$doc_index[tab_heads$table_number %in% grep("Table 1$", tab_heads$table_number, value = TRUE)] <-
-# table_para_name$doc_index[table_para_name$table_number %in% grep("Table 1$", tab_heads$table_number, value = TRUE)]
-
+## Grab tibble of table names - to link with the table header info, below
 tab_heads <- table_header_name %>% 
   select(doc_index,
          table_name = header_name, 
          text)
-# tt <- table_caption_name %>% 
-#   select(-doc_index) %>% 
-#   full_join(table_para_name, by = c("table_name" = "caption_name"))
-#       
-#   select(-doc_index,
-#          -table_index) %>% 
-#   distinct(.keep_all = TRUE)
-#   left_join(table_para_name) %>% 
-#   left_join(table_para_name, by = "table_number")
-# 
-# tt <- table_para_name %>% 
-#   select(-doc_index) %>% 
-#   full_join(table_caption_name, by = c("table_number" = "caption_number")) %>% 
-#   mutate(table_name = case_when(table_name == caption_name ~ table_name,
-#                                 is.na(table_name) & !is.na(caption_name) ~ caption_name,
-#                                 is.na(caption_name) & table_name == "other" ~ "other",
-#                                 !is.na(table_name) & table_name == "other" ~ caption_name,
-#                                 TRUE ~ table_name)) %>% 
-#   group_by(table_name) %>% 
-#   mutate(table_number = case_when(!is.na(table_number) ~ table_number,
-#                                   is.na(table_number ~ )
-#                                     # table_number,
-#                                     FUN = function(x) unique(x[!is.na(x)]))))
-#          table_z = case_when(table_name %in% c("ranges", "other") ~ "table_x",
-#                              !table_name %in% c("ranges", "other") ~ "tits", #ave(table_number,
-#                                                                          # table_name,
-#                                                                          # table_number,
-#                                                              # FUN = function(x) unique(x[!is.na(x)])),
-#                                   TRUE ~ "table x")) %>% 
-#       select(doc_index, table_number, table_name, is_header, row_id, cell_id, text)
-# ,
-#          ### if a table_name is.na match table_name to table_number ###
-#          table_name = ave(table_name, table_number, FUN = function(x) unique(x[!is.na(x)]))) %>% 
-#   select(doc_index, table_number, table_name, is_header, row_id, cell_id, text)
 
-## Grab tibble of table names and table numbers - to link with the table header info, below
 tab_names <- tab_heads %>% 
-  select(table_name) %>% #, table_number) %>% 
+  select(table_name) %>% 
   filter(!table_name %in% c("stocksummary")) %>% 
   distinct(.keep_all = TRUE)
 
@@ -309,9 +214,6 @@ fig_heads <- content %>%
                                  TRUE ~ NA_character_)) %>% 
   select(doc_index, figure_name, text)
 
-x = officer::read_docx(fileName)
-# tt <- docx_summary(x)
-# grep(caption_keyword, tt$text, value = TRUE)
 
 # table <- "catchoptionsbasis"
 table <- "catchoptions"
@@ -388,33 +290,12 @@ table_fix <- function(x, table,
         
         for(j in 1:nrow(table_body[,i])) {
           
-          
-          ## If all values in parentheses are numeric, add a year 
-          # if(all(grepl("\\(\\d{4}.*\\)", j) == TRUE)) {
-          # grepl("\\(\\d{4}.*\\)", table_body[j,i])
-          
-          # First, get all the plain values e.g., SSB (2019)
-          # new_vals <- sprintf("(%s)", as.numeric(gsub("\\(|\\)", 
-          #                                             "",
-          #                                             stringr::str_extract(j, "\\(\\d{4}\\)"))) + 1)
-          # 
           # First, get all the plain values e.g., SSB (2019)
           new_vals <- sprintf("(%s)", as.numeric(gsub("\\(|\\)", 
                                                       "",
                                                       stringr::str_extract(table_body[j,i], "\\(\\d{4}\\)"))) + 1)
-          
-          
-          # j <- stringr::str_replace_all(j, "\\(\\d{4}\\)", new_vals)
-          
+
           table_body[j,i] <- stringr::str_replace_all(table_body[j,i], "\\(\\d{4}\\)", new_vals)
-          
-          # Next, get the hyphenated values e.g., Rage 3 (2017-2018)
-          # rangers <- data.frame(X = gsub("\\(|\\)", "", 
-          #                                stringr::str_extract(j, "\\(\\d{4}.*-?\\d{4}\\)")),
-          #                       stringsAsFactors = FALSE) %>% 
-          #   tidyr::separate(X, c("A", "B")) %>% 
-          #   mutate(C = sprintf("(%s-%s)", as.numeric(A) + 1, as.numeric(B) + 1))
-          
           
           # Next, get the hyphenated values e.g., Rage 3 (2017-2018)
           rangers <- data.frame(X = gsub("\\(|\\)", "", 
@@ -423,13 +304,8 @@ table_fix <- function(x, table,
             tidyr::separate(X, c("A", "B")) %>% 
             mutate(C = sprintf("(%s-%s)", as.numeric(A) + 1, as.numeric(B) + 1))
           
-          
-          # table_body[,i] <- stringr::str_replace(j, "\\(\\d{4}.*-?\\d{4}\\)", 
-          #                                        rangers$C)
-          
           table_body[j,i] <- stringr::str_replace(table_body[j,i], "\\(\\d{4}.*-?\\d{4}\\)", 
                                                   rangers$C)
-          
           
           ## If there are references w/ characters in the parentheses, just put ICES "(UPDATE REF)"
           if(grepl("ICES \\(\\d{4}.*\\)", table_body[j,i])) {
@@ -649,7 +525,6 @@ table_fix <- function(x, table,
   } # Close tab_index loop
 } 
 
-
 table_remove <- function(x, table){
   
   table_name <- switch(table,
@@ -756,135 +631,63 @@ figure_remove <- function(x, figure){
       cursor_begin
   }
 }
-## remove Source in catchoptions basisis  
+## remove Source in catchoptions basis 
 
-doc <- officer::read_docx(fileName)
 
-figure_remove(doc, figure = "stocksummary")
-figure_remove(doc, figure = "historicalassessment")
-table_remove(doc, table = "stocksummary") # %>% 
-table_fix(x = doc,
-          table = "catchoptionsbasis", 
-          update_header = FALSE, 
-          update_cols = c("Variable", "Source"), 
-          erase_cols = c("Value", "Notes"),
-          add_column = FALSE,
-          add_year = FALSE, 
-          messages = FALSE)
+## ~~~~~~~~~~~~~ ##
+## Format Advice ##
+## ~~~~~~~~~~~~~ ##
 
-table_fix(x = doc,
-          table = "catchoptions", 
-          update_header = TRUE,
-          update_cols = "Basis", 
-          erase_cols = "all",
-          add_column = TRUE,
-          add_year = FALSE, 
-          messages = FALSE) 
-
-table_fix(x = doc,
-          table = "catchoptions", 
-          update_header = TRUE,
-          update_cols = "Basis", 
-          erase_cols = "all",
-          add_column = TRUE,
-          add_year = FALSE, 
-          messages = FALSE) 
-
-table_fix(x = doc,
-          table = "advice", 
-          update_header = FALSE,
-          update_cols = NULL, 
-          erase_cols = NULL,
-          add_column = FALSE,
-          add_year = TRUE, 
-          messages = FALSE) 
-
-table_fix(x = doc,
-          table = "catchdistribution", 
-          update_header = TRUE,
-          update_cols = NULL, 
-          erase_cols = "all",
-          add_column = FALSE,
-          add_year = FALSE, 
-          messages = FALSE) 
-
-table_remove(x = doc, table = "assessmentsummary") 
-
-print(doc, target = paste0(sharePoint, "admin/AdvisoryProgramme/Personal folders/Scott/cursor.docx"))
-  # figure_remove(x = ., figure = "historicalassessment") %>% 
-  # table_fix(table = "advicebasis",
-  #           update_header = FALSE, update_cols = NULL, 
-  #           erase_cols = NULL,
-  #           add_column = FALSE,
-  #           add_year = FALSE, 
-  #           messages = FALSE) %>% 
-  # table_fix(table = "referencepoints",
-  #           update_header = FALSE, update_cols = NULL, 
-  #           erase_cols = NULL,
-  #           add_column = FALSE,
-  #           add_year = FALSE, 
-#           messages = FALSE) %>% 
-# table_fix(table = "assessmentbasis",
-#           update_header = TRUE, update_cols = "Basis", 
-#           erase_cols = "all",
-#           add_column = TRUE,
-#           add_year = FALSE, 
-#           messages = FALSE) %>% 
-# table_fix(table = "advice",
-#           update_header = FALSE, update_cols = NULL, 
-#           erase_cols = NULL,
-#           add_column = FALSE,
-#           add_year = TRUE, 
-#           messages = FALSE) %>% 
-#   table_fix(table = "catchdistribution",
-#             update_header = FALSE, update_cols = NULL, 
-#             erase_cols = "all",
-#             add_column = FALSE,
-#             add_year = FALSE, 
-#             messages = FALSE) %>% 
-#   table_remove(table = "catchhistory") %>% 
-#   table_remove(table = "assessmentsummary") %>% 
-#   table_remove(table = "other")
-
-print(doc, target = "cursor.docx")
-
-# 
-# 
-#   cursor_reach(keyword = sprintf("%s. The basis for the catch options.", "Cod in Subarea 4, Division 7.d, and Subdivision 20")) %>% 
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   body_add_flextable(advice_flextable("Table2")) %>% 
-#   cursor_reach(keyword = sprintf("%s. Annual catch options.", stock_sd$CaptionName)) %>% 
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   body_add_flextable(advice_flextable("Table3")) %>% 
-#   cursor_reach(keyword = sprintf("%s. The basis of the advice.", stock_sd$CaptionName)) %>% 
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   body_add_flextable(advice_flextable("Table4")) %>% 
-#   cursor_reach(keyword = sprintf("%s. Reference points, values, and their technical basis.", stock_sd$CaptionName)) %>% 
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   body_add_flextable(advice_flextable("Table5")) %>% 
-#   cursor_reach(keyword = sprintf("%s. Basis of assessment and advice.", stock_sd$CaptionName)) %>% 
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   body_add_flextable(advice_flextable("Table6")) %>% 
-#   # This table just needs an extra row added... sometimes there are multiples, so need to be clever
-#   cursor_reach(keyword = sprintf("%s. ICES advice and official landings.", stock_sd$CaptionName)) %>% 
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   body_add_flextable(advice_flextable("Table7")) %>% 
-#   cursor_reach(keyword = sprintf("%s. Catch distribution", stock_sd$CaptionName)) %>% 
-#   body_add_par(value =  sprintf("%s. Catch distribution by fleet in 2017 as estimated by ICES.",
-#                                 stock_sd$CaptionName), pos = "on") %>% 
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   body_add_flextable(advice_flextable("Table8")) %>% 
-#   cursor_reach(keyword = "Table ") %>%
-#   cursor_forward %>% 
-#   body_remove %>% 
-#   cursor_reach(keyword = "Table ") %>%
-#   cursor_forward %>% 
-#   body_remove
-#   
+  figure_remove(doc, figure = "stocksummary")
+  figure_remove(doc, figure = "historicalassessment")
+  table_remove(doc, table = "stocksummary") # %>% 
+  table_fix(x = doc,
+            table = "catchoptionsbasis", 
+            update_header = FALSE, 
+            update_cols = c("Variable", "Source"), 
+            erase_cols = c("Value", "Notes"),
+            add_column = FALSE,
+            add_year = FALSE, 
+            messages = FALSE)
+  
+  table_fix(x = doc,
+            table = "catchoptions", 
+            update_header = TRUE,
+            update_cols = "Basis", 
+            erase_cols = "all",
+            add_column = TRUE,
+            add_year = FALSE, 
+            messages = FALSE) 
+  
+  table_fix(x = doc,
+            table = "catchoptions", 
+            update_header = TRUE,
+            update_cols = "Basis", 
+            erase_cols = "all",
+            add_column = TRUE,
+            add_year = FALSE, 
+            messages = FALSE) 
+  
+  table_fix(x = doc,
+            table = "advice", 
+            update_header = FALSE,
+            update_cols = NULL, 
+            erase_cols = NULL,
+            add_column = FALSE,
+            add_year = TRUE, 
+            messages = FALSE) 
+  
+  table_fix(x = doc,
+            table = "catchdistribution", 
+            update_header = TRUE,
+            update_cols = NULL, 
+            erase_cols = "all",
+            add_column = FALSE,
+            add_year = FALSE, 
+            messages = FALSE) 
+  
+  table_remove(x = doc, table = "assessmentsummary") 
+  
+  print(doc, target = "cursor.docx")
+  return(tab_heads)
+} # Close format_advice
