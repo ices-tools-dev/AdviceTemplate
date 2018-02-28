@@ -96,7 +96,7 @@ return(fileList)
 } # Close get_filelist
 
 fileList <- get_filelist(2017)
-stock_name <- fileList$StockKeyLabel[grepl("HAWG", fileList$ExpertGroup)][11]
+stock_name <- fileList$StockKeyLabel[grepl("WGBFAS", fileList$ExpertGroup)][1]
 
 format_advice(stock_name, path_name = "~/") 
 
@@ -105,7 +105,7 @@ format_advice <- function(stock_name, path_name = "/") {
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
   ## Identify the tables to keep and clean ##
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
-  # stock_name <- "cod.27.47d20"
+  #stock_name <- "cod.27.47d20"
   
   ## Start function here by grabbing info for a stock
   stock_sd <- fileList %>% 
@@ -157,6 +157,12 @@ format_advice <- function(stock_name, path_name = "/") {
   
   ## Stock summary table is inserted as an image, so it won't be found searching for table cells,
   ## so it is added using the caption label
+  #HELP SCOTT!
+  
+  # table_header_name <- table_header_name %>%filter(row_id == 1) %>%
+  #   mutate(header_name, case_when(row_id == 1 ~ "other") ~ "stocksummary")
+  #   
+  
   
   table_1 <- content %>% 
     filter(content_type %in% "paragraph",
@@ -168,13 +174,23 @@ format_advice <- function(stock_name, path_name = "/") {
            caption_index,
            header_name)
   
+  #check if this could be skipped, and just remove the Table 1 as image?
+  
   table_header_name <- 
     bind_rows(table_header_name,
               table_1) %>% 
     arrange(doc_index)
-  
+ 
+  table_header_name <- table_header_name[-1,]
+  #In some cat 1 for some reason table 1 is already in table_header_name with headername "other"
+  #so when merging there is one extra table that shouldn+t be there.
+  #find a nice way to fix this
+  #table_header_name <- table_header_name[-c(1), ]
+   
   ## Add caption text to the data.frame based on the doc_index
   table_header_name$text <- content$text[content$doc_index %in% table_header_name$caption_index]
+  
+  
   
   ## Grab tibble of table names - to link with the table header info, below
   tab_heads <- table_header_name %>% 
@@ -186,6 +202,10 @@ format_advice <- function(stock_name, path_name = "/") {
     select(table_name) %>% 
     filter(!table_name %in% c("stocksummary")) %>% 
     distinct(.keep_all = TRUE)
+  
+  #removing source column in table catchbasis, check next year, as wont be needed
+  #content <- content %>% filter(!(text=="Source" & cell_id==3)) %>%
+  #  mutate(cell_id = replace(cell_id, which(doc_index == 26 & cell_id == 4), 3))
   
   ## Holds all the table information (headers, values, ugly tables... everything)
   table_cells <- content %>%
@@ -210,20 +230,35 @@ format_advice <- function(stock_name, path_name = "/") {
     left_join(tab_names, by = c("table_name")) %>% 
     ungroup() %>%
     filter(table_name != "REMOVE") %>%
-    select(doc_index, table_name, is_header, row_id, cell_id, text)
+    select(content_type,doc_index, table_name, is_header, row_id, cell_id, text)
+    
+# removing source column in this table, check next year, as wont be needed  
+  
+  content<- left_join(content, table_cells)%>%
+    filter(!(content_type %in% "table cell"& table_name=="catchoptionsbasis" & cell_id==3))%>%
+    mutate(cell_id = replace(cell_id, which(table_name == "catchoptionsbasis"& cell_id == 4), 3))%>%
+    select(-table_name)  
+  
+  table_cells <- table_cells %>% filter(!(table_name=="catchoptionsbasis" & cell_id==3))%>%
+   mutate(cell_id = replace(cell_id, which(table_name == "catchoptionsbasis"& cell_id == 4), 3))%>%
+    select(-content_type)
+ 
+
   
   ## Captions for figures that will need to be removed
   fig_heads <- content %>% 
     filter(content_type %in% "paragraph",
-           grepl(paste0("Figure\\s\\d", stock_sd$SpeciesCommonName, collapse = "|"), text)) %>% 
+           grepl(paste0( stock_sd$SpeciesCommonName, collapse = "|"), text)) %>% 
     mutate(figure_name = case_when(grepl("Summary of the stock assessment", text) ~ "stocksummary",
                                    grepl("Historical assessment results", text) ~ "historicalassessment",
+                                   grepl("State of the stock and fishery ", text) ~ "stockstatus",
                                    TRUE ~ NA_character_)) %>% 
     select(doc_index, figure_name, text)
+    fig_heads<- na.omit(fig_heads)
   
   
   # table <- "catchoptionsbasis"
-  # table <- "catchoptions"
+  # table <- "catchoptions"         "Figure\\s\\d",
   # update_cols = NULL
   # update_header = FALSE
   # erase_cols = NULL
@@ -307,12 +342,12 @@ format_advice <- function(stock_name, path_name = "/") {
             
             # Next, get the hyphenated values e.g., Rage 3 (2017-2018)
             rangers <- data.frame(X = gsub("\\(|\\)", "", 
-                                           stringr::str_extract(table_body[j,i], "\\(\\d{4}.*-?\\d{4}\\)")),
+                                           stringr::str_extract(table_body[j,i], "\\(\\d{4}.*–?\\d{4}\\)")),
                                   stringsAsFactors = FALSE) %>% 
               tidyr::separate(X, c("A", "B")) %>% 
-              mutate(C = sprintf("(%s-%s)", as.numeric(A) + 1, as.numeric(B) + 1))
+              mutate(C = sprintf("(%s–%s)", as.numeric(A) + 1, as.numeric(B) + 1))
             
-            table_body[j,i] <- stringr::str_replace(table_body[j,i], "\\(\\d{4}.*-?\\d{4}\\)", 
+            table_body[j,i] <- stringr::str_replace(table_body[j,i], "\\(\\d{4}.*–?\\d{4}\\)", 
                                                     rangers$C)
             
             ## If there are references w/ characters in the parentheses, just put ICES "(UPDATE REF)"
@@ -381,6 +416,7 @@ format_advice <- function(stock_name, path_name = "/") {
           stop("add_column only works on the 'catch options' table. Check your table")
         }
       } # close extra column logic
+      
       
       ## Update the year values in headers
       if(update_header){
@@ -451,7 +487,7 @@ format_advice <- function(stock_name, path_name = "/") {
       
       # col_num <- max(as.numeric(table_info$col_keys))
       col_num <- nrow(table_info)
-      col_width <- rep.int((18/2.54)/col_num, col_num)
+      col_width <- rep.int((17.4/2.54)/col_num, col_num)
       row_num <- nrow(table_body)
       row_height <- rep.int(0.1, row_num)
       
@@ -615,7 +651,8 @@ format_advice <- function(stock_name, path_name = "/") {
     
     figure_name <- switch(figure,
                           stocksummary = "stock summary figure",
-                          historicalassessment = "historical assessment figure")
+                          historicalassessment = "historical assessment figure",
+                          stockstatus= "stock status table")
     if(!figure %in% fig_heads$figure_name){
       cat("Figure is either not present or the code is unable to identify it as 'stocksummary' or 'historicalassessment'")
     } else if(figure %in% fig_heads$figure_name){
@@ -667,8 +704,7 @@ format_advice <- function(stock_name, path_name = "/") {
       }
     }
   }
-  ## remove Source in catchoptions basis 
-  
+
 
 ## ~~~~~~~~~~~~~ ##
 ## Format Advice ##
@@ -686,7 +722,7 @@ format_advice <- function(stock_name, path_name = "/") {
   table_fix(x = doc,
             table = "catchoptionsbasis", 
             update_header = FALSE, 
-            update_cols = c("Variable", "Source"), 
+            update_cols = "Variable", 
             erase_cols = c("Value", "Notes"),
             add_column = FALSE,
             add_year = FALSE, 
@@ -721,6 +757,7 @@ format_advice <- function(stock_name, path_name = "/") {
   
   table_remove(x = doc, table = "assessmentsummary") 
   
-  print(doc, target = sprintf("%s%s.docx", path_name, stock_name))
+  print(doc, target = sprintf("%s%s.docx", path_name = "~/", stock_name))
   return(tab_heads)
 } # Close format_advice
+
