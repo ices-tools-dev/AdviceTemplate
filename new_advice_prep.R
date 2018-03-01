@@ -96,7 +96,7 @@ return(fileList)
 } # Close get_filelist
 
 fileList <- get_filelist(2017)
-stock_name <- fileList$StockKeyLabel[grepl("WGBFAS", fileList$ExpertGroup)][1]
+stock_name <- fileList$StockKeyLabel[grepl("HAWG", fileList$ExpertGroup)][2]
 
 format_advice(stock_name, path_name = "~/") 
 
@@ -133,7 +133,8 @@ format_advice <- function(stock_name, path_name = "/") {
     select(-dplyr::one_of("content_type", "style_name", "level", 
                           "num_id", "row_id", "is_header", "col_span", "row_span")) %>% 
     spread(cell_id, text) %>% 
-    mutate(header_name = case_when(grepl("^[V-v]ariable", `1`) &
+    mutate(header_name = case_when(grepl("^[F-f]ishing pressure", `2`) ~ "stocksummary",
+                                   grepl("^[V-v]ariable", `1`) &
                                      grepl("^[V-v]alue", `2`) ~ "catchoptionsbasis",
                                    grepl("^[I-i]ndex", `1`) ~ "catchoptionsbasis",
                                    grepl("^[B-b]asis", `1`) ~ "catchoptions",
@@ -148,7 +149,12 @@ format_advice <- function(stock_name, path_name = "/") {
                                      grepl("^[W-w]anted\\s[C-c]atch", `2`) ~ "catchdistribution",
                                    grepl("^[C-c]atch", `1`) &
                                      grepl("^[L-l]andings", `2`) ~ "catchdistribution",
-                                   grepl("^[Y-year]", `1`) ~ "assessmentsummary",
+                                   grepl("^[T-t]otal catch", `1`) &
+                                     grepl("^[L-l]andings", `2`) ~ "catchdistribution",
+                                   grepl("^[Y-year]", `1`) &
+                                     grepl("^[R-r]ecruitment", `2`) ~ "assessmentsummary",
+                                   # grepl("^[Y-year]", `1`) &
+                                   #   grepl("^[G-g]rand total", ) ~ "catchhistory",
                                    TRUE ~ "other"),
            caption_index = doc_index - 1) %>% 
     select(doc_index,
@@ -181,7 +187,7 @@ format_advice <- function(stock_name, path_name = "/") {
               table_1) %>% 
     arrange(doc_index)
  
-  table_header_name <- table_header_name[-1,]
+  table_header_name <- unique(table_header_name)
   #In some cat 1 for some reason table 1 is already in table_header_name with headername "other"
   #so when merging there is one extra table that shouldn+t be there.
   #find a nice way to fix this
@@ -248,17 +254,16 @@ format_advice <- function(stock_name, path_name = "/") {
   ## Captions for figures that will need to be removed
   fig_heads <- content %>% 
     filter(content_type %in% "paragraph",
-           grepl(paste0( stock_sd$SpeciesCommonName, collapse = "|"), text)) %>% 
+           grepl(paste0( "Figure\\s\\d",stock_sd$SpeciesCommonName, collapse = "|"), text)) %>% 
     mutate(figure_name = case_when(grepl("Summary of the stock assessment", text) ~ "stocksummary",
                                    grepl("Historical assessment results", text) ~ "historicalassessment",
-                                   grepl("State of the stock and fishery ", text) ~ "stockstatus",
                                    TRUE ~ NA_character_)) %>% 
     select(doc_index, figure_name, text)
     fig_heads<- na.omit(fig_heads)
   
   
   # table <- "catchoptionsbasis"
-  # table <- "catchoptions"         "Figure\\s\\d",
+  # table <- "catchoptions"         
   # update_cols = NULL
   # update_header = FALSE
   # erase_cols = NULL
@@ -342,12 +347,12 @@ format_advice <- function(stock_name, path_name = "/") {
             
             # Next, get the hyphenated values e.g., Rage 3 (2017-2018)
             rangers <- data.frame(X = gsub("\\(|\\)", "", 
-                                           stringr::str_extract(table_body[j,i], "\\(\\d{4}.*–?\\d{4}\\)")),
+                                           stringr::str_extract(table_body[j,i], "\\(\\d{4}.*-?\\d{4}\\)")),
                                   stringsAsFactors = FALSE) %>% 
               tidyr::separate(X, c("A", "B")) %>% 
-              mutate(C = sprintf("(%s–%s)", as.numeric(A) + 1, as.numeric(B) + 1))
+              mutate(C = sprintf("(%s-%s)", as.numeric(A) + 1, as.numeric(B) + 1))
             
-            table_body[j,i] <- stringr::str_replace(table_body[j,i], "\\(\\d{4}.*–?\\d{4}\\)", 
+            table_body[j,i] <- stringr::str_replace(table_body[j,i], "\\(\\d{4}.*-?\\d{4}\\)", 
                                                     rangers$C)
             
             ## If there are references w/ characters in the parentheses, just put ICES "(UPDATE REF)"
@@ -628,12 +633,14 @@ format_advice <- function(stock_name, path_name = "/") {
       }
       
       if(table == "stocksummary"){
-        cursor_reach(x, keyword = caption_keyword) %>%
-          cursor_forward() %>%
-          body_remove %>%
-          # cursor_forward() %>%
-          # body_remove %>%
-          body_add_fpar(replace_text) %>%
+        rep_num = content$doc_index[grepl("Catch options", (content$text))] - content$doc_index[grepl("Table 1", tolower(content$text))]%>%
+          #cursor_reach(x, keyword = caption_keyword) %>%
+          for(i in 1:rep_num){
+            cursor_backward(x) %>% 
+              body_remove
+          }
+        return(x)
+        body_add_fpar(replace_text) %>%
           cursor_begin
       }
       if(table != "stocksummary"){
@@ -756,6 +763,8 @@ format_advice <- function(stock_name, path_name = "/") {
             messages = FALSE) 
   
   table_remove(x = doc, table = "assessmentsummary") 
+  
+  body_replace_all_text(x= doc, "Catch options", "Catch scenarios", only_at_cursor = FALSE, ...)
   
   print(doc, target = sprintf("%s%s.docx", path_name = "~/", stock_name))
   return(tab_heads)
