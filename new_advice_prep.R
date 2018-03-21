@@ -6,7 +6,7 @@ library(flextable)
 library(officer)
 library(dplyr)
 library(tidyr)
-
+library(ReporteRs)
 
 get_filelist <- function(year = 2017) {
   
@@ -96,7 +96,8 @@ return(fileList)
 } # Close get_filelist
 
 fileList <- get_filelist(2017)
-stock_name <- fileList$StockKeyLabel[grepl("HAWG", fileList$ExpertGroup)][2]
+wgbfas <- fileList %>% filter(ExpertGroup=="WGBFAS", DataCategory == 1)
+stock_name <- wgbfas$StockKeyLabel[2]
 
 format_advice(stock_name, path_name = "~/") 
 
@@ -118,15 +119,30 @@ format_advice <- function(stock_name, path_name = "/") {
   ## Grab the last advice
   doc <- officer::read_docx(fileName)
   
+  
+  #little trick to change the first heading from "ICES stock advice" to 
+  #"ICES advice on fishing opportunities". To be removed next year.
+  cursor_begin(doc)
+  cursor_forward(doc)
+  cursor_forward(doc)
+  body_replace_all_text(x= doc, "stock", "", only_at_cursor = TRUE, ignore.case=FALSE)
+  body_replace_all_text(x= doc, "advice", "advice on fishing opportunities", only_at_cursor = TRUE, ignore.case=FALSE)
+  
   ## Pull out a data.frame of text (content[]) and tables (both tabs[] and content[])
   tabs <- docxtractr::read_docx(fileName)
   content <- officer::docx_summary(doc)
+
   
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
   ## Define tables according to to header and caption ##  
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
   
   ## Get all tables by searching for table cells and get the header row
+  #trying to recognize headers of catchhistorytable!!
+  # content <- content %>% 
+  #   filter(content_type %in% "table cell",
+  #          col_id == 1, row_id == c(3,4)) %>%
+  
   table_header_name <- content %>% 
     filter(content_type %in% "table cell",
            row_id == 1) %>%
@@ -151,19 +167,18 @@ format_advice <- function(stock_name, path_name = "/") {
                                      grepl("^[L-l]andings", `2`) ~ "catchdistribution",
                                    grepl("^[T-t]otal catch", `1`) &
                                      grepl("^[L-l]andings", `2`) ~ "catchdistribution",
+                                   grepl("^[C-c]atch", `1`) &
+                                     grepl("^[C-c]ommercial landings", `2`) ~ "catchdistribution",
                                    grepl("^[Y-year]", `1`) &
                                      grepl("^[R-r]ecruitment", `2`) ~ "assessmentsummary",
-                                   # grepl("^[Y-year]", `1`) &
-                                   #   grepl("^[G-g]rand total", ) ~ "catchhistory",
+                                   # grepl( `2`, (\\d{4})) &
+                                   #    grepl(`3`,(\\d{4}) ) ~ "catchhistory",
                                    TRUE ~ "other"),
            caption_index = doc_index - 1) %>% 
     select(doc_index,
            caption_index,
            header_name)
   
-  ## Stock summary table is inserted as an image, so it won't be found searching for table cells,
-  ## so it is added using the caption label
-  #HELP SCOTT!
   
   # table_header_name <- table_header_name %>%filter(row_id == 1) %>%
   #   mutate(header_name, case_when(row_id == 1 ~ "other") ~ "stocksummary")
@@ -180,7 +195,7 @@ format_advice <- function(stock_name, path_name = "/") {
            caption_index,
            header_name)
   
-  #check if this could be skipped, and just remove the Table 1 as image?
+  
   
   table_header_name <- 
     bind_rows(table_header_name,
@@ -188,15 +203,13 @@ format_advice <- function(stock_name, path_name = "/") {
     arrange(doc_index)
  
   table_header_name <- unique(table_header_name)
-  #In some cat 1 for some reason table 1 is already in table_header_name with headername "other"
-  #so when merging there is one extra table that shouldn+t be there.
-  #find a nice way to fix this
-  #table_header_name <- table_header_name[-c(1), ]
+  
    
   ## Add caption text to the data.frame based on the doc_index
   table_header_name$text <- content$text[content$doc_index %in% table_header_name$caption_index]
-  
-  
+
+  # table_header_name <- table_header_name%>% filter(header_name  == "catchdistribution")%>%
+  #     body_replace_at(table_header_name$text, "2016", "2017")
   
   ## Grab tibble of table names - to link with the table header info, below
   tab_heads <- table_header_name %>% 
@@ -250,7 +263,6 @@ format_advice <- function(stock_name, path_name = "/") {
     select(-content_type)
  
 
-  
   ## Captions for figures that will need to be removed
   fig_heads <- content %>% 
     filter(content_type %in% "paragraph",
@@ -259,7 +271,7 @@ format_advice <- function(stock_name, path_name = "/") {
                                    grepl("Historical assessment results", text) ~ "historicalassessment",
                                    TRUE ~ NA_character_)) %>% 
     select(doc_index, figure_name, text)
-    fig_heads<- na.omit(fig_heads)
+    #fig_heads<- na.omit(fig_heads)
   
   
   # table <- "catchoptionsbasis"
@@ -285,11 +297,11 @@ format_advice <- function(stock_name, path_name = "/") {
     
     if(table %in% unique(table_cells$table_name)){
     tc <- table_cells %>%
-      filter(table_name == table)
+      filter(table_name == "catchoptions") #change to table!!
     
     for(tab_index in 1:length(unique(tc$doc_index))) {
       
-      table_index <- unique(tc$doc_index)[tab_index]
+      table_index <- unique(tc$doc_index)#[tab_index]
       
       table_body <- tc %>% 
         filter(!is_header,
@@ -368,12 +380,18 @@ format_advice <- function(stock_name, path_name = "/") {
               table_body[j, i] <- stringr::str_replace_all(table_body[j, i], "F\\d{4}", f_vals)
             } # Close update F years
             
-            ## If there are tonne values, replace with "update value"
-            if(table == "catchdistribution" &
-               grepl("\\d.* [T-t]onnes|\\d+\\.*\\d*%", table_body[j,i])){
+            ## If there are subscripts to fix
+            if(grepl("Ftotal", table_body[j,i])) {
+              (gsub("Ftotal","F"["total"], table_body[j,i]))}
               
-              table_body[j,i] <- stringr::str_replace_all(table_body[j, i], "\\d.* [T-t]onnes|\\d+\\.*\\d*%", "UPDATE VALUE")
-            } # Close update tonne values
+            
+            
+            ## If there are tonne values, replace with "update value"
+            # if(table == "catchdistribution" &
+            #    grepl("\\d.* [T-t]onnes|\\d+\\.*\\d*%", table_body[j,i])){
+            #   
+            #   table_body[j,i] <- stringr::str_replace_all(table_body[j, i], "\\d.* [T-t]onnes|\\d+\\.*\\d*%", "UPDATE VALUE")
+            # } # Close update tonne values
             
           } # close add a year loop
         } # Close update_cols_id loop
@@ -416,7 +434,7 @@ format_advice <- function(stock_name, path_name = "/") {
           empty_table <- table_body[,1]
           empty_table[] <- ""
           table_body <- bind_cols(table_body, empty_table)
-          table_header <- c(table_header, "% Advice change")
+          table_header <- c(table_header, "% Advice change (ADD NOTE CALL)")
         } else {
           stop("add_column only works on the 'catch options' table. Check your table")
         }
@@ -425,14 +443,18 @@ format_advice <- function(stock_name, path_name = "/") {
       
       ## Update the year values in headers
       if(update_header){
-        # If all values are numeric, add a year
+        # If all values are numeric, add a year 
         table_header[grepl("\\(\\d{4}\\)", table_header)] <- sprintf("%s (%s)", gsub("\\(\\d{4}\\)", "",
                                                                                      table_header[grepl("\\(\\d{4}\\)", 
                                                                                                         table_header)]), 
                                                                      as.numeric(gsub(".*\\((.*)\\).*", "\\1", 
                                                                                      table_header[grepl("\\(\\d{4}\\)",
                                                                                                         table_header)])) + 1)
-      } # Close update_header logic
+      # #Try to make the subscripts here!
+         table_header[grepl("\b(Ftotal)\b", table_header)] <- sprintf("%s (%s)", gsub("\b(Ftotal)\b", (expression(F[total])),table_header[grepl("\b(Ftotal)\b", table_header)]))
+                                                                          
+        
+        } # Close update_header logic
       
       # Catch options merge rows
       if(table %in% "catchoptions"){
@@ -440,7 +462,7 @@ format_advice <- function(stock_name, path_name = "/") {
         for(i in body_merge_rows){
           table_body[i,] <- table_body[i,1]
         }
-      } # close catch options merge rows 
+      } # close catch options merge rows
       
       #### Formatting steps #### 
       
@@ -449,7 +471,15 @@ format_advice <- function(stock_name, path_name = "/") {
                                stringsAsFactors = FALSE)
       
       ## Default body style ##
-      def_text_body <- fp_text(color = "black", font.size = 9, font.family = "Calibri", bold = FALSE, shading.color = "transparent")
+     # if (text %in% c("pa", "lim", "trigger", "total", "wanted", "unwanted")){
+     #   def_text_body <-  fp_text(color = "black", font.size = 9, font.family = "Calibri", bold = FALSE, vertical.align = "subscript",
+     #            shading.color = "transparent")
+     # }
+     # else {
+       def_text_body <- fp_text(color = "black", font.size = 9, font.family = "Calibri", bold = FALSE, 
+                                shading.color = "transparent")
+     # }
+                           
       def_cell_body <- fp_cell(background.color = "transparent", border = fp_border(color = "black"))
       def_par_body <- fp_par(text.align = "right", padding.right = 3)
       
@@ -457,6 +487,8 @@ format_advice <- function(stock_name, path_name = "/") {
       def_text_head <- update(def_text_body) # NO CHANGE
       def_cell_head <- update(def_cell_body, background.color = "#E8EAEA")
       def_par_head <- update(def_par_body, text.align = "center", padding.right = 0)
+      
+      
       
       ## Column alignment rules
       # •	Column containing YEAR: align content center center
@@ -633,15 +665,24 @@ format_advice <- function(stock_name, path_name = "/") {
       }
       
       if(table == "stocksummary"){
-        rep_num = content$doc_index[grepl("Catch options", (content$text))] - content$doc_index[grepl("Table 1", tolower(content$text))]%>%
-          #cursor_reach(x, keyword = caption_keyword) %>%
-          for(i in 1:rep_num){
-            cursor_backward(x) %>% 
-              body_remove
-          }
-        return(x)
-        body_add_fpar(replace_text) %>%
+                #rep_num = content$doc_index[grepl("Catch options", (content$text))] - content$doc_index[grepl("Table 1", tolower(content$text))]%>%
+          cursor_reach(x, keyword = caption_keyword) %>%
+          #for(i in 1:rep_num){
+            # cursor_forward() %>%
+            #   body_remove}
+                
+        
+        # cursor_reach(x, keyword = caption_keyword) %>%
+        #           cursor_forward() %>%
+        #           body_remove %>%
+                 cursor_forward() %>%
+                 body_remove %>%
+                 body_add_fpar(replace_text) %>%
+        # 
+        # return(x)
+        # body_add_fpar(replace_text) %>%
           cursor_begin
+      }
       }
       if(table != "stocksummary"){
         cursor_reach(x, keyword = caption_keyword) %>% 
@@ -651,8 +692,8 @@ format_advice <- function(stock_name, path_name = "/") {
           cursor_begin
       }
       # cursor_backward %>% 
-    }
-  }
+    }#closes table remove
+  #}
   
   figure_remove <- function(x, figure){
     
@@ -710,7 +751,7 @@ format_advice <- function(stock_name, path_name = "/") {
           cursor_begin
       }
     }
-  }
+  }#close figure remove 
 
 
 ## ~~~~~~~~~~~~~ ##
@@ -725,7 +766,7 @@ format_advice <- function(stock_name, path_name = "/") {
   # doc <- officer::read_docx(fileName)
   figure_remove(doc, figure = "stocksummary")
   figure_remove(doc, figure = "historicalassessment")
-  table_remove(doc, table = "stocksummary") # %>% 
+  table_remove(doc, table = "stocksummary")  
   table_fix(x = doc,
             table = "catchoptionsbasis", 
             update_header = FALSE, 
@@ -753,20 +794,116 @@ format_advice <- function(stock_name, path_name = "/") {
             add_year = TRUE, 
             messages = FALSE) 
   
-  table_fix(x = doc,
-            table = "catchdistribution", 
-            update_header = TRUE,
-            update_cols = NULL, 
-            erase_cols = "all",
-            add_column = FALSE,
-            add_year = FALSE, 
-            messages = FALSE) 
+  # table_fix(x = doc,
+  #           table = "catchdistribution",
+  #           update_header = TRUE,
+  #           update_cols = NULL,
+  #           erase_cols = NULL,
+  #           add_column = FALSE,
+  #           add_year = FALSE,
+  #           messages = FALSE)
+  #cursor here or whatever:
   
-  table_remove(x = doc, table = "assessmentsummary") 
+  # warning_prop <- fp_text(color = "#00B0F0", 
+  #                             font.family = "Calibri",
+  #                             font.size = 11, 
+  #                             bold = TRUE, 
+  #                             italic = FALSE, 
+  #                             underline = FALSE)
+  # 
+  # warning_text <- "Please check validity of this table."
+      
+##finish
   
-  body_replace_all_text(x= doc, "Catch options", "Catch scenarios", only_at_cursor = FALSE, ...)
+ # table_remove(x = doc, table = "assessmentsummary") 
   
+#a few changes in the text for 2018, check next year  
+  
+  body_replace_all_text(x= doc, "atch options", "atch scenarios", only_at_cursor = FALSE, ignore.case=TRUE)
+  body_replace_all_text(x= doc, " Catch distribution by fleet in 2016", " Catch distribution by fleet in 2017", only_at_cursor = FALSE, ignore.case=TRUE)
+  
+#warning messages to be added in the draft:
+  
+  warning_prop <- fp_text(color = "#00B0F0", 
+                              font.family = "Calibri",
+                              font.size = 11, 
+                              bold = TRUE, 
+                              italic = FALSE, 
+                              underline = FALSE)
+ 
+ fpar <- fpar(ftext(("Please note that from 2018 a sentence describing the status of the stock shall be included."),
+    prop= warning_prop))
+  cursor_bookmark(x=doc, "STOCK_STATUS_TABLE_CAPTION") %>% # set cursor on paragraph containing 'a_bkmk'
+    cursor_backward()%>%  # move cursor forward once, we will be on the content to be removed
+     body_add_fpar(fpar)           
+  
+  
+  fpar <- fpar(ftext(("Include a paragraph explaining any change in advice, no matter if this is big or small."),
+                prop= warning_prop))
+ cursor_bookmark(x=doc, "ADVICE_BASIS_TABLE_CAPTION")%>%
+    cursor_backward()%>%
+    cursor_backward()%>%
+   cursor_backward()%>%
+   body_add_fpar(fpar)
+  
+  #Add Caption for %Advice change, with note to add correct symbol, to be updated next year
+   
+   def_text_body <- fp_text(color = "black", font.size = 9, font.family = "Calibri", bold = FALSE)
+    fpar <- fpar(ftext(("Advice value 2019 relative to advice value 2018."),
+                 prop= def_text_body))
+    fpar2 <- fpar(ftext(("Check position and symbol of this Table Caption"),
+                prop= warning_prop))
+   cursor_backward(doc)%>%
+    body_add_fpar(fpar)%>%
+    body_add_fpar(fpar2)
+  
+   fpar <- fpar(ftext(("Please update year, percentages and values"),
+                      prop= warning_prop))
+   cursor_bookmark(doc, "CATCH_DISTRIBUTION_TABLE_CAPTION")%>%
+     cursor_forward()%>%
+     cursor_forward()%>%
+     body_add_fpar(fpar)
+   
+  #body_replace_all_text(x= doc, "Rage", paste("R"["age"]), only_at_cursor = FALSE, ignore.case=TRUE)
+  #format for words that shoul dbe subscripts
+  # def_subscript <- fp_text(color = "black", font.size = 9, font.family = "Calibri", bold = FALSE, vertical.align = "subscript",
+  #                          shading.color = "transparent")
+  # 
+  # text <- c("pa", "lim", "trigger", "total", "wanted", "unwanted")
+  # 
+  # text2 <- ftext(text, def_subscript)
+  # 
+  # body_replace_all_text(doc, text, text2, only_at_cursor = FALSE) 
+  
+  # headerPot <- pot(stockDat$SECTION.NUMBER,
+  #                  format = heading_text_prop) + 
+  #   "\t" +
+  #   pot(stockDat$STOCK.NAME,
+  #       format = heading_text_prop)
+  # 
+  # footerPot <- pot("ICES Advice 2017",
+  #                  format = header_text_prop) +
+  #   pot(", Book ",
+  #       format = header_text_prop) + 
+  #   pot(gsub("^.*\\.","", stockDat$SECTION.NUMBER),
+  #       format = header_text_prop)
+  # 
+  # headerPot2 <- pot("ICES Advice on fishing opportunities, catch, and effort\t\t",
+  #                   format = header_text_prop) +
+  #   pot("Published 30 June 2017",
+  #       format = header_text_prop)
+  # 
+  
+   doc2 <- docx(template="HeadersTemplate2018.docx" )
+   
+   print(doc2, target = "HeadersTemplate2018.docx")
+   styles(doc2)
+   
+   doc <- body_add_docx(x=doc, src = "HeadersTemplate2018.dot", pos = "on")
+   
+   
   print(doc, target = sprintf("%s%s.docx", path_name = "~/", stock_name))
   return(tab_heads)
-} # Close format_advice
+} 
+# Close format_advice
 
