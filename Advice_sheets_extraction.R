@@ -5,14 +5,16 @@
 
 fileList <- get_filelist(2018)
 
+unique(fileList$ExpertGroup)
+
 #Write the name of the WG
 
-WG<- fileList %>% filter(ExpertGroup=="NWWG")
+WG<- fileList %>% filter(ExpertGroup=="WGCSE")
 
 #Check that the number of elements in this list corresponds to those in the excel
 # Change the number form 1 to n number of names in the WG list
 
-stock_name <- WG$StockKeyLabel[2]
+stock_name <- WG$StockKeyLabel[4]
 
 stock_name 
 

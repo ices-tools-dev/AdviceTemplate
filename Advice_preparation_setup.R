@@ -12,7 +12,7 @@ library(dplyr)
 library(tidyr)
 library(ReporteRs)
 
-get_filelist <- function(year = 2018) {
+get_filelist <- function(year = 2019) {
   
   # Note: You must log in to SharePoint and have this drive mapped
   sharePoint <- "//community.ices.dk/DavWWWRoot/"
@@ -63,6 +63,11 @@ get_filelist <- function(year = 2018) {
                       "CelticSea", "Faroes", "Iceland",
                       "NorthSea", "salmon", "Widely")
     }
+    if(year == 2019){
+      folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
+                      "CelticSeas", "Faroes", "Iceland",
+                      "NorthSea", "Salmon", "Widely")
+    }
     
     ### Hopefully, future folderNames are consistent, if not, map by hand, as above.
     adviceList <- lapply(advice[advice %in% folderNames],
@@ -95,9 +100,13 @@ fileList <- bind_rows(
     left_join(advice_file_finder(2017), by = c("StockKeyLabel" = "StockCode")),
   rawsd %>%
     filter(YearOfLastAssessment == 2018) %>% 
-    left_join(advice_file_finder(2018), by = c("StockKeyLabel" = "StockCode"))
+    left_join(advice_file_finder(2018), by = c("StockKeyLabel" = "StockCode")),
   ## Repeat for additional years
-  ) %>% 
+  rawsd %>%
+  filter(YearOfLastAssessment == 2019) %>% 
+  left_join(advice_file_finder(2019), by = c("StockKeyLabel" = "StockCode"))
+## Repeat for additional years
+ ) %>% 
   mutate(URL = ifelse(is.na(filepath),
                       NA,
                       paste0(gsub("//community.ices.dk/DavWWWRoot/", 
@@ -106,6 +115,9 @@ fileList <- bind_rows(
                              "?Web=1")))
 return(fileList)
 } # Close get_filelist
+
+
+
 
 ## Find table and perform necessary actions based on instructions for table_name ##
 table_fix <- function(x, table, 
