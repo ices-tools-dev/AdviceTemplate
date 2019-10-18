@@ -7,19 +7,22 @@ fileList <- get_filelist(2018)
 
 #Write the name of the WG
 
-WG<- fileList %>% filter(ExpertGroup=="WGBFAS")
+WG<- fileList %>% filter(ExpertGroup=="NWWG")
 
-# Chane the number form 1 to n number of names in the WG list
+#Check that the number of elements in this list corresponds to those in the excel
+# Change the number form 1 to n number of names in the WG list
 
-stock_name <- WG$StockKeyLabel[10]
+stock_name <- WG$StockKeyLabel[2]
 
 stock_name 
 
 # Check the correct doi in the excel
 
-doi <- "10.17895/ices.advice.4754"
+doi <- "10.17895/ices.advice.4735"
 
 fulldoi<- paste0("https://doi.org/",doi)
+
+#You can select from here to the end and just run it
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 ## Identify the tables to keep and clean ##
@@ -28,6 +31,7 @@ fulldoi<- paste0("https://doi.org/",doi)
 stock_sd <- fileList %>% 
   filter(StockKeyLabel == stock_name) 
 
+stock_sd <- unique(stock_sd)
 
 fileName <- stock_sd %>% 
   pull(filepath)
