@@ -1,6 +1,8 @@
 #############################
-# Install and load packages #
+# 1st Map SharePoint to be able to find previous year word advice sheet
+# 2 nd Load get_filelist, table_fix, table_remove and figure_remove functions
 #############################
+
 
 ## Go to This PC, right click, "Map network drive", paste this
 ##   \\community.ices.dk\DavWWWRoot , and finish
@@ -11,13 +13,14 @@ library(officer)
 library(dplyr)
 library(tidyr)
 library(ReporteRs)
+library(magrittr)
 
-get_filelist <- function(year = 2019) {
+get_filelist <- function(year = 2020) {
   
   # Note: You must log in to SharePoint and have this drive mapped
   sharePoint <- "//community.ices.dk/DavWWWRoot/"
   
-  if(!dir.exists(sprintf("%sAdvice/Advice%s/", sharePoint, year))) {
+  if(!dir.exists(sprintf("%sAdvice/Advice%s/", sharePoint, year- 1))) {
     stop("Note: You must be on the ICES network and have sharepoint mapped to a local drive.")
   }
   
@@ -26,8 +29,8 @@ get_filelist <- function(year = 2019) {
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
   
   rawsd <- jsonlite::fromJSON("http://sd.ices.dk/services/odata3/StockListDWs3")$value %>% 
-    filter(ActiveYear == year,
-           YearOfNextAssessment == year + 1) %>% ## This should be fixed when ActiveYear is updated in SID 
+    filter(ActiveYear == year ,
+           YearOfNextAssessment == year) %>% ## This should be fixed when ActiveYear is updated in SID 
     mutate(CaptionName = gsub("\\s*\\([^\\)]+\\)", "", as.character(StockKeyDescription)),
            AdviceReleaseDate = as.Date(AdviceReleaseDate, format = "%d/%m/%y"),
            PubDate = format(AdviceReleaseDate, "%e %B %Y"),
@@ -40,38 +43,43 @@ get_filelist <- function(year = 2019) {
   
   advice_file_finder <- function(year){
     
-    advice <- list.files(sprintf("%sAdvice/Advice%s/", sharePoint, year))
+    advice <- list.files(sprintf("%sAdvice/Advice%s/", sharePoint, year-1))
     
-    if(year == 2015){
+    if(year == 2016){
       folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
                       "CelticSea", "FaroePlateau", "Iceland",
                       "NASalmon","NorthSea", "Widely")
     }
-    if(year == 2016){
+    if(year == 2017){
       folderNames = c("BalticSea", "BarentsSea", "Biscay", 
                       "CelticSea", "Faroes", "Iceland",
                       "NorthSea", "Salmon", "Widely")
     }
-    if(year == 2017){
+    if(year == 2018){
       folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
                       "CelticSea", "Faroes", "Iceland",
                       "NorthSea", "Salmon", "Widely")
     }
     
-    if(year == 2018){
+    if(year == 2019){
       folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
                       "CelticSea", "Faroes", "Iceland",
                       "NorthSea", "salmon", "Widely")
     }
-    if(year == 2019){
+    if(year == 2020){
       folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
                       "CelticSeas", "Faroes", "Iceland",
                       "NorthSea", "Salmon", "Widely")
     }
+    # if(year == 2020){
+    #   folderNames = c("BalticSea", "BarentsSea", "BayOfBiscay", 
+    #                   "CelticSeas", "Faroes", "Iceland",
+    #                   "NorthSea", "Salmon", "Widely")
+    # }
     
     ### Hopefully, future folderNames are consistent, if not, map by hand, as above.
     adviceList <- lapply(advice[advice %in% folderNames],
-                         function(x) list.files(sprintf("%sAdvice/Advice%s/%s/Released_Advice", sharePoint, year, x)))
+                         function(x) list.files(sprintf("%sAdvice/Advice%s/%s/Released_Advice", sharePoint, year -1, x)))
     
     names(adviceList) <- folderNames
     fileList <- do.call("rbind", lapply(adviceList,
@@ -80,7 +88,7 @@ get_filelist <- function(year = 2019) {
     colnames(fileList) <- "StockCode"
     fileList$filepath <- sprintf("%sAdvice/Advice%s/%s/Released_Advice/%s", 
                                  sharePoint,
-                                 year,
+                                 year -1,
                                  gsub("\\..*", "", row.names(fileList)),
                                  fileList$StockCode)
     fileList$StockCode <- tolower(gsub("\\.docx*", "", fileList$StockCode))
@@ -91,20 +99,20 @@ get_filelist <- function(year = 2019) {
 fileList <- bind_rows(
   rawsd %>%
     filter(YearOfLastAssessment == 2015) %>% 
-      left_join(advice_file_finder(2015), by = c("PreviousStockKeyLabel" = "StockCode")),
+      left_join(advice_file_finder(2016), by = c("PreviousStockKeyLabel" = "StockCode")),
   rawsd %>%  
     filter(YearOfLastAssessment == 2016) %>% 
-    left_join(advice_file_finder(2016), by = c("PreviousStockKeyLabel" = "StockCode")),
+    left_join(advice_file_finder(2017), by = c("PreviousStockKeyLabel" = "StockCode")),
   rawsd %>%
     filter(YearOfLastAssessment == 2017) %>% 
-    left_join(advice_file_finder(2017), by = c("StockKeyLabel" = "StockCode")),
+    left_join(advice_file_finder(2018), by = c("StockKeyLabel" = "StockCode")),
   rawsd %>%
     filter(YearOfLastAssessment == 2018) %>% 
-    left_join(advice_file_finder(2018), by = c("StockKeyLabel" = "StockCode")),
+    left_join(advice_file_finder(2019), by = c("StockKeyLabel" = "StockCode")),
   ## Repeat for additional years
   rawsd %>%
   filter(YearOfLastAssessment == 2019) %>% 
-  left_join(advice_file_finder(2019), by = c("StockKeyLabel" = "StockCode"))
+  left_join(advice_file_finder(2020), by = c("StockKeyLabel" = "StockCode"))
 ## Repeat for additional years
  ) %>% 
   mutate(URL = ifelse(is.na(filepath),
@@ -136,6 +144,11 @@ table_fix <- function(x, table,
     tc <- table_cells %>%
       filter(table_name == table) #change to table!!
     
+    # if(table == "assessmentbasis"){
+    #   tc$is_header[1:7] <- "TRUE"
+    #   tc$is_header[8:14] <- "FALSE"
+    # }
+    # 
     for(tab_index in 1:length(unique(tc$doc_index))) {
       
       table_index <- unique(tc$doc_index)#[tab_index]
@@ -405,6 +418,7 @@ table_fix <- function(x, table,
       }
     } # Close tab_index loop
   } # Close table name go
+  
 } # Close table_fix function
 
 table_remove <- function(x, table){
